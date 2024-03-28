@@ -271,7 +271,7 @@ class VGAE_FrameWork(torch.nn.Module):
 
 
                 elif sampling_method=='monte':
-                    generated_adj= self.run_monte(generated_adj, x, adj, targets)
+                    generated_adj, generated_classes= self.run_monte(generated_adj, generated_classes, x, adj, targets)
                     
                 elif sampling_method == 'importance_sampling':
                     generated_adj = self.run_importance_sampling(generated_adj, x, adj, targets)
@@ -288,25 +288,28 @@ class VGAE_FrameWork(torch.nn.Module):
 
         return std_z, m_z, z, generated_adj, generated_feat, generated_classes
 
-    def run_monte(self, generated_adj, x, adj, targets):
+    def run_monte(self, generated_adj, generated_classes, x, adj, targets):
         
         # make edge list from the ends of the target nodes
         targets = np.array(targets)
         target_node = np.array([targets[-1]] * targets.shape[0]) 
         target_edges = np.stack((targets, target_node), axis=1)[:-1]
         
-        s = generated_adj
-
+        sum_adj = generated_adj
+        sum_labels = generated_classes
         num_it = 30
         for i in range(num_it - 1):
             z_0 = self.get_z(x, self.latent_dim)  # attribute encoder
             z, m_z, std_z = self.inference(adj, z_0)
             generated_adj = self.generator(z)
-            s += generated_adj
+            generated_classes = self.classifier(z)
+            sum_labels += generated_classes
+            sum_adj += generated_adj
 
-        generated_adj = s / num_it
+        generated_adj = sum_adj / num_it
+        generated_classes = sum_labels / num_it
 
-        return generated_adj
+        return generated_adj, generated_classes
 
     def run_importance_sampling(self, generated_adj, x, adj, targets):
 
