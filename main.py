@@ -45,18 +45,18 @@ warnings.simplefilter('ignore')
 parser = argparse.ArgumentParser(description='Inductive')
 
 parser.add_argument('--e', type=int, dest="epoch_number", default=100, help="Number of Epochs")
-parser.add_argument('--dataSet', type=str, default="Cora")
+parser.add_argument('--dataSet', type=str, default="CiteSeer")
 parser.add_argument('--loss_type', dest="loss_type", default="1", help="type of combination between loss_A and loss_F")
-parser.add_argument('--sampling_method', dest="sampling_method", default="monte", help="This var shows sampling method it could be: monte, importance_sampling, deterministic")
-parser.add_argument('--method', dest="method", default="multi", help="This var shows method it could be: multi, single")
+parser.add_argument('--sampling_method', dest="sampling_method", default="deterministic", help="This var shows sampling method it could be: monte, importance_sampling, deterministic")
+parser.add_argument('--method', dest="method", default="single", help="This var shows method it could be: multi, single")
 
 
 parser.add_argument('--seed', type=int, default=123)
 parser.add_argument('--num_node', dest="num_node", default=-1, type=str,
                     help="the size of subgraph which is sampled; -1 means use the whole graph")
 parser.add_argument('--decoder_type', dest="decoder_type", default="ML_SBM",help="the decoder type")
-parser.add_argument('--encoder_type', dest="encoder_type", default="Multi_GIN",
-                    help="the encoder type, Either Multi_GIN, Multi_GCN, Multi_GAT")
+parser.add_argument('--encoder_type', dest="encoder_type", default="Multi_GAT",
+                    help="the encoder type, Either Multi_GIN, Multi_GCN, Multi_GAT, Multi_SAGE")
 parser.add_argument('--NofRels', dest="num_of_relations", default=1,
                     help="Number of latent or known relation; number of deltas in SBM")
 parser.add_argument('--NofCom', dest="num_of_comunities", default=128,
@@ -71,6 +71,8 @@ parser.add_argument('--is_prior', dest="is_prior", default=False, help="This fla
 parser.add_argument('--targets', dest="targets", default=[], help="This list is used for sampling")
 parser.add_argument('--fully_inductive', dest="fully_inductive", default=False,
                     help="This flag is used if want to have fully o semi inductive link prediction")
+parser.add_argument('--transductive', dest="transductive", default="False", type=str,
+                    help="This flag is used if want to have transductive link prediction")
 
 
 args = parser.parse_args()
@@ -79,6 +81,8 @@ if fully_inductive:
     save_recons_adj_name = args.encoder_type[-3:] + "_" + args.sampling_method + "_fully_" + args.method + "_" + args.dataSet
 else:
     save_recons_adj_name = args.encoder_type[-3:] + "_" + args.sampling_method + "_semi_" + args.method + "_" + args.dataSet
+
+
 
 print("")
 print("SETING: " + str(args))
@@ -117,6 +121,12 @@ inductive_model, z_p = helper.train_model(dataCenter, features.to(device),
 # Split A into test and train
 trainId = getattr(dataCenter, ds + '_train')
 testId = getattr(dataCenter, ds + '_test')
+
+if args.transductive == "True":
+    trainId = np.concatenate((trainId,testId))
+    save_recons_adj_name = "Trans_"+ save_recons_adj_name
+else:
+    save_recons_adj_name = "Ind_" + save_recons_adj_name
 # testId = trainId
 
 
@@ -159,6 +169,9 @@ targets = []
 target_ids = []
 sampling_method = args.sampling_method
 
+pred_multi = np.array([])
+true_multi = np.array([])
+
 if fully_inductive:
     res = org_adj.nonzero()
     index = np.where(np.isin(res[0], testId) & np.isin(res[1], trainId) | (
@@ -176,9 +189,10 @@ res = org_adj.nonzero()
 index = np.where(np.isin(res[0], testId))  # only one node of the 2 ends of an edge needs to be in testId
 idd_list = res[0][index]
 neighbour_list = res[1][index]
-sample_list = random.sample(range(0, len(idd_list)), 100)
+sample_list = random.sample(range(0, len(idd_list)), 50)
 
 # run prior network separately
+correct_subgraph = 0
 counter = 0
 target_edges = []
 for i in sample_list:
@@ -306,10 +320,13 @@ for i in sample_list:
 
 
         auc, val_acc, val_ap, precision, recall, HR = get_metrics(target_list, org_adj, re_adj_prior_sig)
-        # auc_l, acc_l, ap_l, precision_l, recall_l, F1_score = roc_auc_estimator_labels(pred_multi_label, true_multi_label)
+        auc_l, acc_l, ap_l, precision_l, recall_l, F1_score = roc_auc_estimator_labels([re_label_prior_sig[idd]], [labels[idd]],labels)
 
+        if val_acc==1 and acc_l==1:
+            correct_subgraph += 1
 
-
+        precision_list_label.append(precision_l)
+        acc_list_label.append(acc_l)
         auc_list.append(auc)
         acc_list.append(val_acc)
         ap_list.append(val_ap)
@@ -402,10 +419,15 @@ if fully_inductive:
 else:
     save_recons_adj_name = args.encoder_type[
                            -3:] + "_" + args.sampling_method + "_semi_" + args.method + "_" + args.dataSet
-
+if args.transductive == "True":
+    # trainId = np.concatenate((trainId,testId))
+    save_recons_adj_name = "Trans_"+ save_recons_adj_name
+else:
+    save_recons_adj_name = "Ind_" + save_recons_adj_name
 
 save_recons_adj_name = save_recons_adj_name + "_" + args.loss_type
 print(save_recons_adj_name)
+print(correct_subgraph)
 print("Link Prediction")
 print("auc= %.3f , acc= %.3f ap= %.3f , precision= %.3f , recall= %.3f , HR= %.3f" % (
 statistics.mean(auc_list), statistics.mean(acc_list), statistics.mean(ap_list), statistics.mean(precision_list),
@@ -415,12 +437,12 @@ print("auc= %.3f , acc= %.3f ap= %.3f , precision= %.3f , recall= %.3f , F1_Scor
 statistics.mean(auc_list_label), statistics.mean(acc_list_label), statistics.mean(ap_list_label),
 statistics.mean(precision_list_label), statistics.mean(recall_list_label), statistics.mean(F1_list_label)))
 
-with open('./results_csv/results.csv', 'a', newline="\n") as f:
+with open('./results.csv', 'a', newline="\n") as f:
     writer = csv.writer(f)
     writer.writerow(
         [save_recons_adj_name, statistics.mean(auc_list), statistics.mean(acc_list), statistics.mean(ap_list),
-         statistics.mean(precision_list), statistics.mean(recall_list), statistics.mean(HR_list)])
-with open('./results_csv/results.csv', 'a', newline="\n") as f:
+         statistics.mean(precision_list), statistics.mean(recall_list), statistics.mean(HR_list), correct_subgraph])
+with open('./results.csv', 'a', newline="\n") as f:
     writer = csv.writer(f)
     writer.writerow(["labels_" + save_recons_adj_name, statistics.mean(auc_list_label), statistics.mean(acc_list_label),
                      statistics.mean(ap_list_label), statistics.mean(precision_list_label),

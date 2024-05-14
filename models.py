@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from utils import *
 from dgl.nn.pytorch import GraphConv as GraphConv
 from dgl.nn.pytorch import GATConv as GATConv
+from dgl.nn import SAGEConv as SAGEConv
 from dgl.nn import GINConv as GINConv
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GridSearchCV
@@ -103,7 +104,39 @@ class multi_layer_GCN(torch.nn.Module):
         eps = torch.randn_like(std)
         return eps.mul(std).add(mean)
 
+class multi_layer_SAGE(torch.nn.Module):
+    def __init__(self, in_feature, latent_dim=32, layers=[64]):
+        """
+        :param in_feature: the size of input feature; X.shape()[1]
+        :param latent_dim: the dimention of each embedded node; |z| or len(z)
+        :param layers: a list in which each element determine the size of corresponding GCNN Layer.
+        """
+        super(multi_layer_SAGE, self).__init__()
+        layers = [in_feature] + layers
+        if len(layers) < 1: raise Exception("sorry, you need at least two layer")
+        self.ConvLayers = torch.nn.ModuleList(
+            SAGEConv(layers[i], layers[i + 1], aggregator_type='gcn') for i in
+            range(len(layers) - 1))
 
+        self.q_z_mean = GraphConv(layers[-1], latent_dim, activation=None, bias=False, weight=True)
+
+        self.q_z_std = GraphConv(layers[-1], latent_dim, activation=None, bias=False, weight=True)
+
+    def forward(self, adj, x):
+        dropout = torch.nn.Dropout(0)
+        for conv_layer in self.ConvLayers:
+            x = torch.tanh(conv_layer(adj, x))
+            x = dropout(x)
+
+        m_q_z = self.q_z_mean(adj, x)
+        std_q_z = torch.relu(self.q_z_std(adj, x)) + .0001
+
+        z = self.reparameterize(m_q_z, std_q_z)
+        return z, m_q_z, std_q_z,
+
+    def reparameterize(self, mean, std):
+        eps = torch.randn_like(std)
+        return eps.mul(std).add(mean)
 
 
 

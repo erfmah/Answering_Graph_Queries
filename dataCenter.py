@@ -495,7 +495,7 @@ class DataCenter():
         # train_indexs = np.array([])
         #
         # len_test = int(num_nodes * test_split)
-        # len_val = int(num_nodes * val_split)
+        # len_val = int(num_nodes * val_split)see
         # len_train = num_nodes - (len_val + len_test)
         #
         # node_per_class = int(len_train / num_classes)

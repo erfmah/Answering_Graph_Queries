@@ -90,11 +90,13 @@ def  optimizer_VAE (lambda_1,lambda_2, lambda_3, true_labels, reconstructed_labe
     if loss_type == "0":
         posterior_cost = posterior_cost_classes
     elif loss_type == "1":
-        posterior_cost = posterior_cost_edges + posterior_cost_features + posterior_cost_classes
+        posterior_cost = 2*posterior_cost_edges + posterior_cost_features + posterior_cost_classes
     elif loss_type == "2":
         posterior_cost = (adj_shape/features_shape) * posterior_cost_edges + (features_shape/adj_shape) * posterior_cost_features
     elif loss_type == "3":
-        posterior_cost = posterior_cost_edges + posterior_cost_classes
+        posterior_cost = posterior_cost_edges
+    elif loss_type == "4":
+        posterior_cost = posterior_cost_edges+posterior_cost_classes
     return z_kl, posterior_cost,posterior_cost_edges ,posterior_cost_features , posterior_cost_classes, acc, val_poterior_cost, posterior_cost_edges, posterior_cost_features
 
 
@@ -115,11 +117,15 @@ def get_metrics(target_edges, org_adj, reconstructed_adj):
     
     
     precision, recall, thresholds = precision_recall_curve(true_label, pred)
-    fscore = (2 * precision * recall) / (precision + recall)
-    ix = argmax(fscore)
-    Threshold = thresholds[ix]
-    Threshold = 0.5
-    
+    filter = recall >= 0.8  # or any other recall level you deem necessary
+    best_threshold = thresholds[np.argmax(precision[filter])] if any(filter) else 0.5
+    Threshold = best_threshold
+    # fscore = (2 * precision * recall) / (precision + recall)
+    # ix = argmax(fscore)
+    # Threshold = thresholds[ix]
+    # Threshold = 0.5
+    # thresholds = np.append(thresholds, 1)
+    # acc = [accuracy_score(true_label, prediction >= t) for t in thresholds]
     
     pred[pred > Threshold] = 1.0
     pred[pred < Threshold] = 0.0
@@ -178,10 +184,8 @@ def roc_auc_estimator_labels(re_labels, labels, org_labels):
     precision = precision_score(y_pred=pred, y_true=true_label, average="weighted")
     recall = recall_score(y_pred=pred, y_true=true_label, average="weighted")
 
-
     roc_auc_scores = []
-
-
+    seen_classes = 0
 
     for i in range(num_classes):
         # Calculate ROC-AUC for each class
@@ -189,11 +193,12 @@ def roc_auc_estimator_labels(re_labels, labels, org_labels):
         y_pred = torch.from_numpy(prediction[:, i])
         y_true = torch.cat([y_true, torch.tensor([0])])
         y_pred = torch.cat([y_pred, torch.tensor([0])])
-        if len(y_true.nonzero())>0:
+        if len(y_true.nonzero()) > 0:
+            seen_classes += 1
             roc_auc = roc_auc_score(y_true, y_pred)
             roc_auc_scores.append(roc_auc)
 
-    average_roc_auc = sum(roc_auc_scores) / num_classes
+    average_roc_auc = sum(roc_auc_scores) / seen_classes
 
 
     acc = accuracy_score(y_pred=pred, y_true=true_label)
@@ -235,6 +240,14 @@ def get_pdf(mean_p, std_p, mean_q, std_q, z, targets):
     return pdf_all_z_p, pdf_all_z_q
 
 def weight_labels(labels):
+    n_samples = labels.shape[0]
+    labels_ind = torch.argmax(torch.from_numpy(labels), dim=1)
+    class_counts = torch.bincount(labels_ind)
+    class_weights = []
+    num_classes = labels.shape[1]
+    for i in range(0,num_classes):
+        class_weights.append(n_samples/(class_counts[i]*num_classes))
+    return torch.tensor(class_weights)
     # labels = torch.argmax(torch.from_numpy(labels), dim=1)
     # # labels = torch.from_numpy(labels)
     # class_counts = torch.bincount(labels)
@@ -248,14 +261,7 @@ def weight_labels(labels):
     # # Calculate inverse class frequencies to use as class weights
     # class_weights = 1.0 / class_frequencies
     # class_weights /= class_weights.sum()
-    n_samples = labels.shape[0]
-    labels_ind = torch.argmax(torch.from_numpy(labels), dim=1)
-    class_counts = torch.bincount(labels_ind)
-    class_weights = []
-    num_classes = labels.shape[1]
-    for i in range(0,num_classes):
-        class_weights.append(n_samples/(class_counts[i]*num_classes))
-    return torch.tensor(class_weights)
+
 
 def weight_edges(labels):
     # labels = torch.from_numpy(labels)

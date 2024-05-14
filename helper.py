@@ -79,6 +79,9 @@ def train_model(dataCenter, features, args, device):
     elif encoder == "Multi_GIN":
         encoder_model = multi_layer_GIN(num_of_comunities, latent_dim=num_of_comunities, layers=encoder_layers)
 
+    elif encoder == "Multi_SAGE":
+        encoder_model = multi_layer_SAGE(num_of_comunities, latent_dim=num_of_comunities, layers=encoder_layers)
+
     else:
         raise Exception("Sorry, this Encoder is not Impemented; check the input args")
 
@@ -194,8 +197,8 @@ def train_model(dataCenter, features, args, device):
                                                                                                 pos_wight, norm)
 
 
-        loss = reconstruction_loss + z_kl
-
+        # loss = reconstruction_loss + z_kl
+        loss = reconstruction_loss
 
         # backward propagation
         optimizer.zero_grad()
