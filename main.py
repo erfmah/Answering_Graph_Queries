@@ -31,7 +31,7 @@ from dataCenter import *
 from utils import *
 from models import *
 
-import helper as helper
+import helper_opt as helper
 import statistics
 import warnings
 
@@ -45,7 +45,7 @@ warnings.simplefilter('ignore')
 parser = argparse.ArgumentParser(description='Inductive')
 
 parser.add_argument('--e', type=int, dest="epoch_number", default=100, help="Number of Epochs")
-parser.add_argument('--dataSet', type=str, default="CiteSeer")
+parser.add_argument('--dataSet', type=str, default="ACM")
 parser.add_argument('--loss_type', dest="loss_type", default="1", help="type of combination between loss_A and loss_F")
 parser.add_argument('--sampling_method', dest="sampling_method", default="deterministic", help="This var shows sampling method it could be: monte, importance_sampling, deterministic")
 parser.add_argument('--method', dest="method", default="single", help="This var shows method it could be: multi, single")
@@ -117,6 +117,9 @@ org_adj = adj_list.toarray()
 #  train inductive_model
 inductive_model, z_p = helper.train_model(dataCenter, features.to(device),
                                          args, device)
+# inductive_model, z_p = helper.train_PNModel(dataCenter, features.to(device),
+#                                          args, device)
+
 
 # Split A into test and train
 trainId = getattr(dataCenter, ds + '_train')
@@ -189,7 +192,7 @@ res = org_adj.nonzero()
 index = np.where(np.isin(res[0], testId))  # only one node of the 2 ends of an edge needs to be in testId
 idd_list = res[0][index]
 neighbour_list = res[1][index]
-sample_list = random.sample(range(0, len(idd_list)), 50)
+sample_list = random.sample(range(0, len(idd_list)), 1)
 
 # run prior network separately
 correct_subgraph = 0

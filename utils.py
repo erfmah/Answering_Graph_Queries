@@ -90,7 +90,7 @@ def  optimizer_VAE (lambda_1,lambda_2, lambda_3, true_labels, reconstructed_labe
     if loss_type == "0":
         posterior_cost = posterior_cost_classes
     elif loss_type == "1":
-        posterior_cost = 2*posterior_cost_edges + posterior_cost_features + posterior_cost_classes
+        posterior_cost = lambda_1 * posterior_cost_edges + lambda_2 * posterior_cost_features + lambda_3 * posterior_cost_classes
     elif loss_type == "2":
         posterior_cost = (adj_shape/features_shape) * posterior_cost_edges + (features_shape/adj_shape) * posterior_cost_features
     elif loss_type == "3":
