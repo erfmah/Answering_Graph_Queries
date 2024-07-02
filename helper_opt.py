@@ -167,31 +167,50 @@ def train_model(dataCenter, features, args, device):
                                       (2 * (feat_val.shape[0] * feat_val.shape[1] - torch.sum(feat_val))))
 
 
-    pbounds = {
-        'lambda_1': (0.0, 1.0),
-        'lambda_2': (0.0, 1.0),
-        'lambda_3': (0.0, 1.0)
-    }
-    optimizer_function = make_optimizer_wrapper(labels_train, labels_val, dataset, epoch_number, model, graph_dgl, graph_dgl_val, feat_train,
-                feat_val, targets, sampling_method, is_prior, loss_type, adj_train, adj_val, norm_feat,
-                pos_weight_feat, norm_feat_val, pos_weight_feat_val, num_nodes, num_nodes_val, pos_wight, norm,
-                pos_wight_val, norm_val, optimizer)
-    optimizer_hp = BayesianOptimization(
-        f=optimizer_function,
-        pbounds=pbounds,
-        random_state=42
-    )
-    optimizer_hp.maximize(
-        init_points=10,
-        n_iter=20
-    )
-    print(optimizer_hp.max)
+    # pbounds = {
+    #     'lambda_1': (0.0, 1.0),
+    #     'lambda_2': (0.0, 1.0),
+    #     'lambda_3': (0.0, 1.0)
+    # }
+    # optimizer_function = make_optimizer_wrapper(labels_train, labels_val, dataset, epoch_number, model, graph_dgl, graph_dgl_val, feat_train,
+    #             feat_val, targets, sampling_method, is_prior, loss_type, adj_train, adj_val, norm_feat,
+    #             pos_weight_feat, norm_feat_val, pos_weight_feat_val, num_nodes, num_nodes_val, pos_wight, norm,
+    #             pos_wight_val, norm_val, optimizer)
+    # optimizer_hp = BayesianOptimization(
+    #     f=optimizer_function,
+    #     pbounds=pbounds,
+    #     random_state=42
+    # )
+    # optimizer_hp.maximize(
+    #     init_points=10,
+    #     n_iter=20
+    # )
+    # print(optimizer_hp.max)
 
     # Extract and print the best values for weight1 and weight2
-    best_params = optimizer_hp.max['params']
-    lambda_1= best_params['lambda_1']
-    lambda_2= best_params['lambda_2']
-    lambda_3 = best_params['lambda_3']
+    # best_params = optimizer_hp.max['params']
+    # lambda_1= best_params['lambda_1']
+    # lambda_2= best_params['lambda_2']
+    # lambda_3 = best_params['lambda_3']
+
+    lambda_1 = 1
+    lambda_2 = 1
+    lambda_3 = 1
+
+    with open('weights.csv', mode='r') as file:
+        # Create a CSV reader object
+        csv_reader = csv.reader(file)
+
+        # Read the header (first row) if present
+        header = next(csv_reader)
+        # print(f"Header: {header}")
+
+        # Iterate over the rows in the CSV file
+        for row in csv_reader:
+            if row[0]==args.dataSet:
+                lambda_1 = float(row[1])
+                lambda_2 = float(row[2])
+                lambda_3 = float(row[3])
 
     print("weights:", lambda_1, lambda_2, lambda_3)
     for epoch in range(epoch_number):
@@ -224,11 +243,11 @@ def train_model(dataCenter, features, args, device):
         print("Epoch: {:03d} | Loss: {:05f} | edge_loss: {:05f} |feat_loss: {:05f} |node_classification_loss: {:05f} | z_kl_loss: {:05f} | Accuracy: {:03f}".format(
             epoch + 1, loss.item(), reconstruction_loss.item(),posterior_cost_edges.item() ,posterior_cost_features.item() , posterior_cost_classes.item(), z_kl.item(), acc))
     model.eval()
-
-    with open('./weights.csv', 'a', newline="\n") as f:
-        writer = csv.writer(f)
-        writer.writerow(
-            [args.dataSet, lambda_1, lambda_2, lambda_3])
+    #
+    # with open('./weights.csv', 'a', newline="\n") as f:
+    #     writer = csv.writer(f)
+    #     writer.writerow(
+    #         [args.dataSet, lambda_1, lambda_2, lambda_3])
 
     return model, z
 

@@ -7,6 +7,7 @@ import csv
 from sklearn.utils import shuffle
 from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix, average_precision_score, recall_score, \
     precision_score, precision_recall_curve
+from sklearn.metrics import auc as PRAUC
 from numpy import argmax
 import copy
 import scipy.sparse as sp
@@ -120,6 +121,8 @@ def get_metrics(target_edges, org_adj, reconstructed_adj):
     filter = recall >= 0.8  # or any other recall level you deem necessary
     best_threshold = thresholds[np.argmax(precision[filter])] if any(filter) else 0.5
     Threshold = best_threshold
+    pr_auc = PRAUC(recall, precision)
+
     # fscore = (2 * precision * recall) / (precision + recall)
     # ix = argmax(fscore)
     # Threshold = thresholds[ix]
@@ -142,7 +145,7 @@ def get_metrics(target_edges, org_adj, reconstructed_adj):
     HR = precision_score(y_pred=np.array(pred)[hr_ind], y_true=np.array(true_label)[hr_ind])
     
     
-    return auc, acc, ap, precision, recall, HR
+    return auc, acc, ap, precision, recall, HR, pr_auc
 
 
 

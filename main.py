@@ -45,7 +45,7 @@ warnings.simplefilter('ignore')
 parser = argparse.ArgumentParser(description='Inductive')
 
 parser.add_argument('--e', type=int, dest="epoch_number", default=100, help="Number of Epochs")
-parser.add_argument('--dataSet', type=str, default="ACM")
+parser.add_argument('--dataSet', type=str, default="IMDB")
 parser.add_argument('--loss_type', dest="loss_type", default="1", help="type of combination between loss_A and loss_F")
 parser.add_argument('--sampling_method', dest="sampling_method", default="deterministic", help="This var shows sampling method it could be: monte, importance_sampling, deterministic")
 parser.add_argument('--method', dest="method", default="single", help="This var shows method it could be: multi, single")
@@ -141,6 +141,7 @@ ap_list = []
 precision_list = []
 recall_list = []
 HR_list = []
+pr_auc_list = []
 
 auc_list_label = []
 acc_list_label = []
@@ -192,7 +193,7 @@ res = org_adj.nonzero()
 index = np.where(np.isin(res[0], testId))  # only one node of the 2 ends of an edge needs to be in testId
 idd_list = res[0][index]
 neighbour_list = res[1][index]
-sample_list = random.sample(range(0, len(idd_list)), 1)
+sample_list = random.sample(range(0, len(idd_list)), 100)
 
 # run prior network separately
 correct_subgraph = 0
@@ -322,7 +323,7 @@ for i in sample_list:
         true_multi_label.append(labels[idd])
 
 
-        auc, val_acc, val_ap, precision, recall, HR = get_metrics(target_list, org_adj, re_adj_prior_sig)
+        auc, val_acc, val_ap, precision, recall, HR, pr_auc = get_metrics(target_list, org_adj, re_adj_prior_sig)
         auc_l, acc_l, ap_l, precision_l, recall_l, F1_score = roc_auc_estimator_labels([re_label_prior_sig[idd]], [labels[idd]],labels)
 
         if val_acc==1 and acc_l==1:
@@ -336,6 +337,7 @@ for i in sample_list:
         precision_list.append(precision)
         recall_list.append(recall)
         HR_list.append(HR)
+        pr_auc_list.append(pr_auc)
 
 
 
@@ -431,26 +433,38 @@ else:
 save_recons_adj_name = save_recons_adj_name + "_" + args.loss_type
 print(save_recons_adj_name)
 print(correct_subgraph)
-print("Link Prediction")
+print("Link Prediction mean")
 print("auc= %.3f , acc= %.3f ap= %.3f , precision= %.3f , recall= %.3f , HR= %.3f" % (
 statistics.mean(auc_list), statistics.mean(acc_list), statistics.mean(ap_list), statistics.mean(precision_list),
 statistics.mean(recall_list), statistics.mean(HR_list)))
+# print("Link Prediction std")
+# print("auc= %.3f , acc= %.3f ap= %.3f , precision= %.3f , recall= %.3f , HR= %.3f, pr_auc=%3f" % (
+# statistics.stdev(auc_list), statistics.stdev(acc_list), statistics.stdev(ap_list), statistics.stdev(precision_list),
+# statistics.stdev(recall_list), statistics.stdev(HR_list), statistics.stdev(pr_auc_list)))
 print("Node Classification")
 print("auc= %.3f , acc= %.3f ap= %.3f , precision= %.3f , recall= %.3f , F1_Score= %.3f" % (
 statistics.mean(auc_list_label), statistics.mean(acc_list_label), statistics.mean(ap_list_label),
 statistics.mean(precision_list_label), statistics.mean(recall_list_label), statistics.mean(F1_list_label)))
 
+
+
+
 with open('./results.csv', 'a', newline="\n") as f:
     writer = csv.writer(f)
     writer.writerow(
-        [save_recons_adj_name, statistics.mean(auc_list), statistics.mean(acc_list), statistics.mean(ap_list),
-         statistics.mean(precision_list), statistics.mean(recall_list), statistics.mean(HR_list), correct_subgraph])
+        [save_recons_adj_name+"_mean", statistics.mean(auc_list), statistics.mean(acc_list), statistics.mean(ap_list),
+         statistics.mean(precision_list), statistics.mean(recall_list), statistics.mean(HR_list)])
+# with open('./results.csv', 'a', newline="\n") as f:
+#     writer = csv.writer(f)
+#     writer.writerow(
+#         [save_recons_adj_name+"_std", statistics.stdev(auc_list), statistics.stdev(acc_list), statistics.stdev(ap_list), statistics.stdev(precision_list),
+# statistics.stdev(recall_list), statistics.stdev(HR_list), statistics.stdev(pr_auc_list)])
 with open('./results.csv', 'a', newline="\n") as f:
     writer = csv.writer(f)
     writer.writerow(["labels_" + save_recons_adj_name, statistics.mean(auc_list_label), statistics.mean(acc_list_label),
                      statistics.mean(ap_list_label), statistics.mean(precision_list_label),
                      statistics.mean(recall_list_label), statistics.mean(F1_list_label)])
-tr = torch.tensor(target_edges)
-tr_ids = torch.tensor((target_ids))
-torch.save(tr, args.dataSet+"_targets.pt")
-torch.save(tr_ids, args.dataSet+"_target_idss.pt")
+# tr = torch.tensor(target_edges)
+# tr_ids = torch.tensor((target_ids))
+# torch.save(tr, args.dataSet+"_targets.pt")
+# torch.save(tr_ids, args.dataSet+"_target_idss.pt")
