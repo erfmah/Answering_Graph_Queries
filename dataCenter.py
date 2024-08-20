@@ -22,7 +22,7 @@ import pickle
 import zipfile
 
 import dgl
-from dgl.data import PubmedGraphDataset, CoauthorCSDataset
+from dgl.data import PubmedGraphDataset, CoauthorCSDataset, CoraGraphDataset, CiteseerGraphDataset, AmazonCoBuyComputerDataset, AmazonCoBuyPhotoDataset
 
 from networkx.readwrite import json_graph
 from torch.hub import download_url_to_file
@@ -44,6 +44,35 @@ class DataCenter():
         super().__init__()
 
     def load_dataSet(self, dataSet):
+        if "_dgl" in dataSet:
+            if dataSet == 'Cora_dgl':
+                ds = CoraGraphDataset()
+            if dataSet == 'CiteSeer_dgl':
+                ds = CiteseerGraphDataset()
+            if dataSet == 'photos_dgl':
+                ds = AmazonCoBuyPhotoDataset()
+            if dataSet == 'computer_dgl':
+                ds = AmazonCoBuyComputerDataset()
+            g = ds[0]
+            num_class = ds.num_classes
+            features = g.ndata['feat']
+            labels = g.ndata['label']
+            labels = labels.numpy()
+            adj_matrix = g.adjacency_matrix(scipy_fmt='coo')
+            adj = adj_matrix.toarray()
+            test_indexs, val_indexs, train_indexs = self._split_data(labels, adj)
+            encoder = OneHotEncoder(sparse_output=False)
+            numerical_classes = labels.reshape(-1, 1)
+            labels = encoder.fit_transform(numerical_classes)
+            setattr(self, dataSet + '_test', test_indexs)
+            setattr(self, dataSet + '_val', val_indexs)
+            setattr(self, dataSet + '_train', train_indexs)
+
+            setattr(self, dataSet + '_feats', features)
+            setattr(self, dataSet + '_labels', labels)
+            setattr(self, dataSet + '_adj_lists', adj)
+
+
         if dataSet == 'photos' or dataSet == 'computers':
             labels = np.load("./datasets/" + dataSet + "/labels.npy")
             features = np.load("./datasets/" + dataSet + "/x.npy")

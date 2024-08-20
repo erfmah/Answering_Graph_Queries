@@ -93,7 +93,7 @@ def  optimizer_VAE (lambda_1,lambda_2, lambda_3, true_labels, reconstructed_labe
     elif loss_type == "1":
         posterior_cost = lambda_1 * posterior_cost_edges + lambda_2 * posterior_cost_features + lambda_3 * posterior_cost_classes
     elif loss_type == "2":
-        posterior_cost = (adj_shape/features_shape) * posterior_cost_edges + (features_shape/adj_shape) * posterior_cost_features
+        posterior_cost = posterior_cost_edges + posterior_cost_features +  posterior_cost_classes
     elif loss_type == "3":
         posterior_cost = posterior_cost_edges
     elif loss_type == "4":
@@ -145,7 +145,7 @@ def get_metrics(target_edges, org_adj, reconstructed_adj):
     HR = precision_score(y_pred=np.array(pred)[hr_ind], y_true=np.array(true_label)[hr_ind])
     
     
-    return auc, acc, ap, precision, recall, HR, pr_auc
+    return auc, acc, ap, precision, recall, HR, np.max(thresholds)
 
 
 

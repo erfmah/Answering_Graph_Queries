@@ -166,51 +166,59 @@ def train_model(dataCenter, features, args, device):
     norm_feat_val = torch.true_divide((feat_val.shape[0] * feat_val.shape[1]),
                                       (2 * (feat_val.shape[0] * feat_val.shape[1] - torch.sum(feat_val))))
 
-
-    # pbounds = {
-    #     'lambda_1': (0.0, 1.0),
-    #     'lambda_2': (0.0, 1.0),
-    #     'lambda_3': (0.0, 1.0)
-    # }
-    # optimizer_function = make_optimizer_wrapper(labels_train, labels_val, dataset, epoch_number, model, graph_dgl, graph_dgl_val, feat_train,
-    #             feat_val, targets, sampling_method, is_prior, loss_type, adj_train, adj_val, norm_feat,
-    #             pos_weight_feat, norm_feat_val, pos_weight_feat_val, num_nodes, num_nodes_val, pos_wight, norm,
-    #             pos_wight_val, norm_val, optimizer)
-    # optimizer_hp = BayesianOptimization(
-    #     f=optimizer_function,
-    #     pbounds=pbounds,
-    #     random_state=42
-    # )
-    # optimizer_hp.maximize(
-    #     init_points=10,
-    #     n_iter=20
-    # )
-    # print(optimizer_hp.max)
-
-    # Extract and print the best values for weight1 and weight2
-    # best_params = optimizer_hp.max['params']
-    # lambda_1= best_params['lambda_1']
-    # lambda_2= best_params['lambda_2']
-    # lambda_3 = best_params['lambda_3']
-
     lambda_1 = 1
     lambda_2 = 1
     lambda_3 = 1
 
-    with open('weights.csv', mode='r') as file:
-        # Create a CSV reader object
-        csv_reader = csv.reader(file)
+    #to find weights
+    if args.tuning == "True":
+        pbounds = {
+            'lambda_1': (0.0, 1.0),
+            'lambda_2': (0.0, 1.0),
+            'lambda_3': (0.0, 1.0)
+        }
+        optimizer_function = make_optimizer_wrapper(labels_train, labels_val, dataset, epoch_number, model, graph_dgl, graph_dgl_val, feat_train,
+                    feat_val, targets, sampling_method, is_prior, loss_type, adj_train, adj_val, norm_feat,
+                    pos_weight_feat, norm_feat_val, pos_weight_feat_val, num_nodes, num_nodes_val, pos_wight, norm,
+                    pos_wight_val, norm_val, optimizer)
+        optimizer_hp = BayesianOptimization(
+            f=optimizer_function,
+            pbounds=pbounds,
+            random_state=42
+        )
+        optimizer_hp.maximize(
+            init_points=10,
+            n_iter=20
+        )
+        print(optimizer_hp.max)
 
-        # Read the header (first row) if present
-        header = next(csv_reader)
-        # print(f"Header: {header}")
+        #Extract and print the best values for weight1 and weight2
+        best_params = optimizer_hp.max['params']
+        lambda_1= best_params['lambda_1']
+        lambda_2= best_params['lambda_2']
+        lambda_3 = best_params['lambda_3']
 
-        # Iterate over the rows in the CSV file
-        for row in csv_reader:
-            if row[0]==args.dataSet:
-                lambda_1 = float(row[1])
-                lambda_2 = float(row[2])
-                lambda_3 = float(row[3])
+        with open('./weights.csv', 'a', newline="\n") as f:
+            writer = csv.writer(f)
+            writer.writerow(
+                [args.dataSet, lambda_1, lambda_2, lambda_3])
+
+    # to read weights
+    if args.tuning == "False":
+        with open('weights.csv', mode='r') as file:
+            # Create a CSV reader object
+            csv_reader = csv.reader(file)
+
+            # Read the header (first row) if present
+            header = next(csv_reader)
+            # print(f"Header: {header}")
+
+            # Iterate over the rows in the CSV file
+            for row in csv_reader:
+                if  row[0] in args.dataSet:
+                    lambda_1 = float(row[1])
+                    lambda_2 = float(row[2])
+                    lambda_3 = float(row[3])
 
     print("weights:", lambda_1, lambda_2, lambda_3)
     for epoch in range(epoch_number):
@@ -243,167 +251,12 @@ def train_model(dataCenter, features, args, device):
         print("Epoch: {:03d} | Loss: {:05f} | edge_loss: {:05f} |feat_loss: {:05f} |node_classification_loss: {:05f} | z_kl_loss: {:05f} | Accuracy: {:03f}".format(
             epoch + 1, loss.item(), reconstruction_loss.item(),posterior_cost_edges.item() ,posterior_cost_features.item() , posterior_cost_classes.item(), z_kl.item(), acc))
     model.eval()
-    #
-    # with open('./weights.csv', 'a', newline="\n") as f:
-    #     writer = csv.writer(f)
-    #     writer.writerow(
-    #         [args.dataSet, lambda_1, lambda_2, lambda_3])
+
+
 
     return model, z
 
 
-def tune_model(params, labels_train, labels_val, dataset, epoch_number, model, graph_dgl, graph_dgl_val, feat_train,
-                feat_val, targets, sampling_method, is_prior, loss_type, adj_train_org, adj_val_org, norm_feat,
-                pos_weight_feat, norm_feat_val, pos_weight_feat_val, num_nodes, num_nodes_val, pos_wight, norm,
-                pos_wight_val, norm_val, optimizer):
-    lambda_1, lambda_2, lambda_3 = params
-    best_auc = 0
-    # with open('./results_csv/best_auc.csv', newline='') as f:
-    #     reader = csv.DictReader(f)
-    #     for q in reader:
-    #         best_auc = float(q['auc'])
-
-    # best_validation_loss = 0
-    print(lambda_1, lambda_2, lambda_3)
-
-
-    for epoch in range(epoch_number):
-        model.train()
-        # forward propagation by using all nodes
-        std_z, m_z, z, reconstructed_adj, reconstructed_feat, re_labels = model(graph_dgl, feat_train, labels_train,
-                                                                                targets, sampling_method,
-                                                                                is_prior, train=True)
-        # compute loss and accuracy
-        z_kl, reconstruction_loss,posterior_cost_edges ,posterior_cost_features , posterior_cost_classes, acc, val_recons_loss, loss_adj, loss_feat = optimizer_VAE(lambda_1, lambda_2,
-                                                                                                lambda_3, labels_train,
-                                                                                                re_labels, loss_type,
-                                                                                                reconstructed_adj,
-                                                                                                reconstructed_feat,
-                                                                                                adj_train_org,
-                                                                                                feat_train, norm_feat,
-                                                                                                pos_weight_feat,
-                                                                                                std_z, m_z, num_nodes,
-                                                                                                pos_wight, norm)
-        loss = reconstruction_loss + z_kl
-
-        # reconstructed_adj = torch.sigmoid(reconstructed_adj).detach().numpy()
-
-        model.eval()
-
-        model.train()
-        # backward propagation
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        # print some metrics
-        print(
-            "Epoch: {:03d} | Loss: {:05f} | Reconstruction_loss: {:05f} | z_kl_loss: {:05f} | Accuracy: {:03f}".format(
-                epoch + 1, loss.item(), reconstruction_loss.item(), z_kl.item(), acc))
-    model.eval()
-    with torch.no_grad():
-
-        std_z_val, m_z_val, z_val, reconstructed_adj_val, reconstructed_feat_val, re_labels_val = model(graph_dgl_val,
-                                                                                                        feat_val,
-                                                                                                        labels_val,
-                                                                                                        targets,
-                                                                                                        sampling_method,
-                                                                                                        is_prior,
-                                                                                                        train=True)
-        z_kl_val, val_reconstruction_loss, posterior_cost_edges, posterior_cost_features, posterior_cost_classes, val_acc, val_recons_loss, loss_adj_val, loss_feat_val = optimizer_VAE(lambda_1,
-                                                                                                            lambda_2,
-                                                                                                            lambda_3,
-                                                                                                            labels_val,
-                                                                                                            re_labels_val,
-                                                                                                            loss_type,
-                                                                                                            reconstructed_adj_val,
-                                                                                                            reconstructed_feat_val,
-                                                                                                            adj_val_org,
-                                                                                                            feat_val,
-                                                                                                            norm_feat_val,
-                                                                                                            pos_weight_feat_val,
-                                                                                                            std_z_val,
-                                                                                                            m_z_val,
-                                                                                                            num_nodes_val,
-                                                                                                            pos_wight_val,
-                                                                                                            norm_val)
-        val_loss_total = val_reconstruction_loss + z_kl_val
-        # with open('./results_csv/loss_val.csv', 'a') as f:
-        #     wtr = csv.writer(f)
-        #     wtr.writerow([loss.item()])
-
-    # y_true_feat = (torch.flatten(feat_val)).cpu().detach().numpy()
-    # y_pred_feat = (torch.flatten(torch.sigmoid(reconstructed_feat_val))).cpu().detach().numpy()
-    # index_sample_0_feat = np.random.choice(np.where(y_true_feat == 1)[0], 100)
-    # index_sample_1_feat = np.random.choice(np.where(y_true_feat == 0)[0], 100)
-    # index_sample_feat = np.concatenate((index_sample_0_feat, index_sample_1_feat))
-    # auc_feat = roc_auc_score(y_score=y_pred_feat[index_sample_feat], y_true=y_true_feat[index_sample_feat])
-
-    # y_true_adj = (torch.flatten(adj_val_org)).cpu().detach().numpy()
-    # y_pred_adj = (torch.flatten(torch.sigmoid(reconstructed_adj_val))).cpu().detach().numpy()
-    # index_sample_0_adj = np.random.choice(np.where(y_true_adj == 1)[0], 100)
-    # index_sample_1_adj = np.random.choice(np.where(y_true_adj == 0)[0], 100)
-    # index_sample_adj = np.concatenate((index_sample_0_adj, index_sample_1_adj))
-    # auc_adj = roc_auc_score(y_score=y_pred_adj[index_sample_adj], y_true=y_true_adj[index_sample_adj])
-    #
-    # auc_labels = roc_auc_score(y_score= re_labels_val, y_true= labels_val)
-    #
-    # auc_val = -1*(auc_feat+auc_adj+auc_labels)
-    #
-    # if best_auc > auc_val:
-    #     best_auc = auc_val
-    #     torch.save(model.state_dict(), 'best_model_' + dataset + '.pt')
-    #     with open('./results_csv/best_auc.csv', 'a') as f:
-    #         wtr = csv.writer(f)
-    #         wtr.writerow([best_auc])
-    #
-    #
-    #
-    # return auc_val
-
-    w_l = weight_labels(labels_val)
-    posterior_cost_edges = norm * F.binary_cross_entropy_with_logits(reconstructed_adj_val, adj_val_org,
-                                                                     pos_weight=pos_wight_val)
-    posterior_cost_features = norm_feat * F.binary_cross_entropy_with_logits(reconstructed_feat_val, feat_val,
-                                                                             pos_weight=pos_weight_feat)
-    posterior_cost_classes = F.cross_entropy(re_labels_val, (torch.tensor(labels_val).to(torch.float64)), weight=w_l)
-
-    cost = posterior_cost_edges + posterior_cost_features + posterior_cost_classes
-
-    return cost.item()
-
-# z_kl, reconstruction_loss, acc, val_recons_loss = optimizer_VAE_em(alpha, mask_index, not_masked_index, reconstructed_adj, reconstructed_feat,
-#                                                                adj_train_org, feat_train, norm_feat,pos_weight_feat,
-#                                                                std_z, m_z, num_nodes, pos_wight_masked, pos_wight_not_masked, norm_masked, norm_not_masked )
-
-
-# train_auc, train_acc, train_ap, train_conf = roc_auc_estimator_train(train_true, train_false,
-#                                                       reconstructed_adj, adj_train)
-
-# if split_the_data_to_train_test == True:
-#     std_z, m_z, z, reconstructed_adj_val = model(graph_dgl_val, feat_val, is_prior, train=False)
-#     reconstructed_adj_val = torch.sigmoid(reconstructed_adj_val).detach().numpy()
-#     val_auc, val_acc, val_ap, val_conf = roc_auc_estimator_train(val_true, val_false,
-#                                                     reconstructed_adj_val, adj_val)
-
-#     # keep the history to plot
-#     pltr.add_values(epoch, [loss.item(), train_acc,  reconstruction_loss.item(), z_kl, train_auc],
-#                     [None, val_acc, val_recons_loss,None, val_auc  # , val_ap
-#                         ], redraw=False)  # ["Accuracy", "Loss", "AUC", "AP"]
-# else:
-#     # keep the history to plot
-#     pltr.add_values(epoch, [acc, loss.item(), None  # , None
-#                             ],
-#                     [None, None, None  # , None
-#                       ], redraw=False)  # ["Accuracy", "loss", "AUC", "AP"])
-
-# # Ploting the recinstructed Graph
-# if epoch % visulizer_step == 0:
-#     # pltr.redraw()
-#     print("Val conf:", )
-#     print(val_conf, )
-#     print("Train Conf:")
-#     print(train_conf)
 def optimize_weights(lambda_1, lambda_2, lambda_3,labels_train, labels_val, dataset, epoch_number, model, graph_dgl, graph_dgl_val, feat_train,
                 feat_val, targets, sampling_method, is_prior, loss_type, adj_train_org, adj_val_org, norm_feat,
                 pos_weight_feat, norm_feat_val, pos_weight_feat_val, num_nodes, num_nodes_val, pos_wight, norm,
@@ -463,11 +316,6 @@ def optimize_weights(lambda_1, lambda_2, lambda_3,labels_train, labels_val, data
 
     return -1*cost.item()
 
-# def optimize_weights_wrapper(weight1, weight2):
-#     return optimize_weights(lambda_1, lambda_2, lambda_3,labels_train, labels_val, dataset, epoch_number, model, graph_dgl, graph_dgl_val, feat_train,
-#                 feat_val, targets, sampling_method, is_prior, loss_type, adj_train_org, adj_val_org, norm_feat,
-#                 pos_weight_feat, norm_feat_val, pos_weight_feat_val, num_nodes, num_nodes_val, pos_wight, norm,
-#                 pos_wight_val, norm_val, optimizer)
 
 def make_optimizer_wrapper(labels_train, labels_val, dataset, epoch_number, model, graph_dgl, graph_dgl_val, feat_train,
                 feat_val, targets, sampling_method, is_prior, loss_type, adj_train_org, adj_val_org, norm_feat,
