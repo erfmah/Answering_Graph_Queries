@@ -1,4 +1,4 @@
-# Answering_Graph_Queries
+# Deep Generative Models for Subgraph Prediction
 **Authors**: Erfaneh Mahmoudzadeh, Parmis Naddaf, Kiarash Zahirnia, Oliver Schulte
 
 This is a PyTorch implementation of Subgraph Prediction Via Inference from a Model.
