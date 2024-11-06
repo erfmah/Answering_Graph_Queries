@@ -29,7 +29,7 @@ from models import *
 import timeit
 import csv
 from bayes_opt import BayesianOptimization
-
+from loss import *
 
 # %% KDD model
 def train_model(dataCenter, features, args, device):
@@ -54,6 +54,8 @@ def train_model(dataCenter, features, args, device):
     original_adj_full= torch.FloatTensor(getattr(dataCenter, ds+'_adj_lists')).to(device)
     node_label_full= torch.FloatTensor(getattr(dataCenter, ds+'_labels')).to(device)
 
+    val_indx = getattr(dataCenter, ds + '_val_edge_idx')
+    train_indx = getattr(dataCenter, ds + '_train_edge_idx')
 
     # shuffling the data, and selecting a subset of it
     if subgraph_size == -1:
@@ -104,8 +106,23 @@ def train_model(dataCenter, features, args, device):
     trainId = getattr(dataCenter, ds + '_train')
     testId = getattr(dataCenter, ds + '_test')
     validId = getattr(dataCenter, ds + '_val')
+    #
+    # adj_train = getattr(dataCenter, ds + '_adj_train')
+    # adj_val = getattr(dataCenter, ds + '_adj_val')
+    #
+    # feat_np = features.cpu().data.numpy()
+    # feat_train = feat_np
+    # feat_val = feat_np
+    #
+    #
+    # labels_np = np.array(node_label, dtype=np.float16)
+    # labels_train = labels_np
+    # labels_val = labels_np
 
-    adj_train =  original_adj.cpu().detach().numpy()[trainId, :][:, trainId]
+
+
+
+    adj_train = original_adj.cpu().detach().numpy()[trainId, :][:, trainId]
     adj_val = original_adj.cpu().detach().numpy()[validId, :][:, validId]
 
     feat_np = features.cpu().data.numpy()
@@ -180,7 +197,7 @@ def train_model(dataCenter, features, args, device):
         optimizer_function = make_optimizer_wrapper(labels_train, labels_val, dataset, epoch_number, model, graph_dgl, graph_dgl_val, feat_train,
                     feat_val, targets, sampling_method, is_prior, loss_type, adj_train, adj_val, norm_feat,
                     pos_weight_feat, norm_feat_val, pos_weight_feat_val, num_nodes, num_nodes_val, pos_wight, norm,
-                    pos_wight_val, norm_val, optimizer)
+                    pos_wight_val, norm_val, optimizer, val_indx, trainId)
         optimizer_hp = BayesianOptimization(
             f=optimizer_function,
             pbounds=pbounds,
@@ -215,7 +232,7 @@ def train_model(dataCenter, features, args, device):
 
             # Iterate over the rows in the CSV file
             for row in csv_reader:
-                if  row[0] in args.dataSet:
+                if row[0] in args.dataSet:
                     lambda_1 = float(row[1])
                     lambda_2 = float(row[2])
                     lambda_3 = float(row[3])
@@ -237,7 +254,7 @@ def train_model(dataCenter, features, args, device):
                                                                                                 feat_train, norm_feat,
                                                                                                 pos_weight_feat,
                                                                                                 std_z, m_z, num_nodes,
-                                                                                                pos_wight, norm)
+                                                                                                pos_wight, norm, val_indx, train_indx)
 
         loss = reconstruction_loss + z_kl
 
@@ -260,7 +277,7 @@ def train_model(dataCenter, features, args, device):
 def optimize_weights(lambda_1, lambda_2, lambda_3,labels_train, labels_val, dataset, epoch_number, model, graph_dgl, graph_dgl_val, feat_train,
                 feat_val, targets, sampling_method, is_prior, loss_type, adj_train_org, adj_val_org, norm_feat,
                 pos_weight_feat, norm_feat_val, pos_weight_feat_val, num_nodes, num_nodes_val, pos_wight, norm,
-                pos_wight_val, norm_val, optimizer):
+                pos_wight_val, norm_val, optimizer, val_indx, trainId):
     for epoch in range(epoch_number):
         model.train()
         # forward propagation by using all nodes
@@ -278,7 +295,7 @@ def optimize_weights(lambda_1, lambda_2, lambda_3,labels_train, labels_val, data
             feat_train, norm_feat,
             pos_weight_feat,
             std_z, m_z, num_nodes,
-            pos_wight, norm)
+            pos_wight, norm, val_indx, trainId)
         loss = reconstruction_loss + z_kl
 
         # reconstructed_adj = torch.sigmoid(reconstructed_adj).detach().numpy()
@@ -320,10 +337,10 @@ def optimize_weights(lambda_1, lambda_2, lambda_3,labels_train, labels_val, data
 def make_optimizer_wrapper(labels_train, labels_val, dataset, epoch_number, model, graph_dgl, graph_dgl_val, feat_train,
                 feat_val, targets, sampling_method, is_prior, loss_type, adj_train_org, adj_val_org, norm_feat,
                 pos_weight_feat, norm_feat_val, pos_weight_feat_val, num_nodes, num_nodes_val, pos_wight, norm,
-                pos_wight_val, norm_val, optimizer):
+                pos_wight_val, norm_val, optimizer, val_indx, trainId):
     def optimize_weights_wrapper(lambda_1, lambda_2, lambda_3):
         return optimize_weights(lambda_1, lambda_2, lambda_3,labels_train, labels_val, dataset, epoch_number, model, graph_dgl, graph_dgl_val, feat_train,
                 feat_val, targets, sampling_method, is_prior, loss_type, adj_train_org, adj_val_org, norm_feat,
                 pos_weight_feat, norm_feat_val, pos_weight_feat_val, num_nodes, num_nodes_val, pos_wight, norm,
-                pos_wight_val, norm_val, optimizer)
+                pos_wight_val, norm_val, optimizer, val_indx, trainId)
     return optimize_weights_wrapper

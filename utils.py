@@ -20,86 +20,6 @@ from sklearn.metrics import f1_score
 
 
 
-# objective Function
-def  optimizer_VAE (lambda_1,lambda_2, lambda_3, true_labels, reconstructed_labels, loss_type, pred, reconstructed_feat, labels, x, norm_feat, pos_weight_feat,  std_z, mean_z, num_nodes, pos_weight, norm):
-    # val_poterior_cost = 0
-    # w_l = weight_labels(true_labels)
-    # posterior_cost_edges = norm * F.binary_cross_entropy_with_logits(pred, labels, pos_weight=pos_weight)
-    # posterior_cost_features = norm_feat * F.binary_cross_entropy_with_logits(reconstructed_feat, x, pos_weight=pos_weight_feat)
-    # posterior_cost_classes = F.cross_entropy(reconstructed_labels, (torch.tensor(true_labels).to(torch.float64)), weight=w_l)
-    # z_kl = (-0.5 / num_nodes) * torch.mean(torch.sum(1 + 2 * torch.log(std_z) - mean_z.pow(2) - (std_z).pow(2), dim=1))
-    #
-    # shape_adj = pred.shape[0]*pred.shape[1]
-    # shape_feat = x.shape[0]*x.shape[1]
-    # shape_labels = true_labels.shape[0]
-    #
-    # total = shape_adj+shape_feat+shape_labels
-    #
-    # acc = (torch.sigmoid(pred).round() == labels).sum() / float(pred.shape[0] * pred.shape[1])
-    # ones_x = x.nonzero().shape[0]
-    # ones_adj = labels.nonzero().shape[0]
-    # if loss_type == "0":
-    #     posterior_cost = posterior_cost_edges
-    # elif loss_type == "1":
-    #     posterior_cost = lambda_1 * posterior_cost_edges + (1-lambda_1) * posterior_cost_features
-    # elif loss_type == "2":
-    #     posterior_cost = lambda_1 * (1 / ones_adj) * posterior_cost_edges + (1-lambda_1) * (1 / ones_x) * posterior_cost_features
-    # elif loss_type == "3":
-    #     posterior_cost = lambda_1 * (ones_x / ones_adj) * posterior_cost_edges + (1-lambda_1) * (ones_adj / ones_x) * posterior_cost_features
-    # elif loss_type == "4":
-    #     posterior_cost = lambda_1 * (1 / (labels.shape[0]*labels.shape[0])) * posterior_cost_edges + (1-lambda_1) * (1 / (x.shape[0]*x.shape[1])) * posterior_cost_features
-    # elif loss_type == "5":
-    #     # posterior_cost = lambda_1 *(1/shape_adj)* posterior_cost_edges + lambda_2 *(1/shape_labels)*posterior_cost_classes + lambda_3 *(1/shape_feat)*posterior_cost_features
-    #     # posterior_cost = (shape_feat/shape_adj)* lambda_1 * posterior_cost_edges + lambda_2 * posterior_cost_classes + (shape_adj/shape_feat)*lambda_3  * posterior_cost_features
-    #     # posterior_cost = (shape_feat / shape_adj)  * posterior_cost_edges +   posterior_cost_classes + (shape_adj / shape_feat)  * posterior_cost_features
-    #     # posterior_cost = posterior_cost_edges + posterior_cost_classes + posterior_cost_features
-    #     posterior_cost = posterior_cost_edges + posterior_cost_features
-    #
-    # elif loss_type == "6":
-    #     posterior_cost = lambda_1 * (ones_adj / ones_x) * posterior_cost_edges + (1-lambda_1) * (ones_x / ones_adj) * posterior_cost_features
-    # elif loss_type == "7":
-    #     posterior_cost = lambda_1 * ((x.shape[0] * x.shape[1]) / (labels.shape[0] * labels.shape[0])) * posterior_cost_edges +  (1-lambda_1) * (
-    #             (labels.shape[0] * labels.shape[1]) / (x.shape[0] * x.shape[1])) * posterior_cost_features
-    #     # posterior_cost = ((x.shape[0] * x.shape[1]) / (labels.shape[0] * labels.shape[1])) * posterior_cost_edges + (
-    #     #                          (labels.shape[0] * labels.shape[1]) / (x.shape[0] * x.shape[1])) * posterior_cost_features
-    # elif loss_type == "8":
-    #     posterior_cost = lambda_1 *((x.shape[0] * x.shape[1]) / (labels.shape[0] * labels.shape[1])) * posterior_cost_edges + (1-lambda_1) *(
-    #             (labels.shape[0] * labels.shape[1]) / (x.shape[0] * x.shape[1])) * posterior_cost_features
-    # elif loss_type == "9":
-    #     posterior_cost = posterior_cost_edges+posterior_cost_features
-    #
-    # else:
-    #     posterior_cost = lambda_1 * ((labels.shape[0] * labels.shape[1]) / (x.shape[0] * x.shape[1])) * posterior_cost_edges + (1-lambda_1) * (
-    #             (x.shape[0] * x.shape[1]) / (labels.shape[0] * labels.shape[1])) * posterior_cost_features
-
-    val_poterior_cost = 0
-    w_l = weight_labels(true_labels)
-    # pos_weight = weight_edges(labels)
-    posterior_cost_edges = norm * F.binary_cross_entropy_with_logits(pred, labels, pos_weight=pos_weight)
-    posterior_cost_features = norm_feat * F.binary_cross_entropy_with_logits(reconstructed_feat, x, pos_weight=pos_weight_feat)
-    # MSE_loss = torch.nn.MSELoss()
-    # posterior_cost_features = norm_feat * MSE_loss(reconstructed_feat, x)
-    posterior_cost_classes = F.cross_entropy(reconstructed_labels, (torch.tensor(true_labels).to(torch.float64)), weight=w_l)
-
-    z_kl = (-0.5 / num_nodes) * torch.mean(torch.sum(1 + 2 * torch.log(std_z) - mean_z.pow(2) - (std_z).pow(2), dim=1))
-
-    acc = (torch.sigmoid(pred).round() == labels).sum() / float(pred.shape[0] * pred.shape[1])
-    adj_shape = labels.shape[0]*labels.shape[1]
-    features_shape = x.shape[0]*x.shape[1]
-    labels_shape = reconstructed_labels.shape[0]*reconstructed_labels.shape[1]
-
-    if loss_type == "0":
-        posterior_cost = posterior_cost_classes
-    elif loss_type == "1":
-        posterior_cost = lambda_1 * posterior_cost_edges + lambda_2 * posterior_cost_features + lambda_3 * posterior_cost_classes
-    elif loss_type == "2":
-        posterior_cost = posterior_cost_edges + posterior_cost_features +  posterior_cost_classes
-    elif loss_type == "3":
-        posterior_cost = posterior_cost_edges
-    elif loss_type == "4":
-        posterior_cost = posterior_cost_edges+posterior_cost_classes
-    return z_kl, posterior_cost,posterior_cost_edges ,posterior_cost_features , posterior_cost_classes, acc, val_poterior_cost, posterior_cost_edges, posterior_cost_features
-
 
 
 def get_metrics(target_edges, org_adj, reconstructed_adj):
@@ -276,6 +196,34 @@ def weight_edges(labels):
     for i in range(0,num_classes):
         class_weights.append(n_samples/(class_counts[i]*num_classes))
     return torch.tensor(class_weights)
+
+def test(test_edges, org_adj, run_network, features, labels, inductive_model, targets, sampling_method):
+    adj_list_copy = copy.deepcopy(org_adj)
+    for i, j in test_edges:
+        adj_list_copy[i][j] = 0
+
+    std_z_prior, m_z_prior, z_prior, re_adj_prior, re_feat_prior, re_prior_labels = run_network(features,
+                                                                                                adj_list_copy,
+                                                                                                labels,
+                                                                                                inductive_model,
+                                                                                                targets,
+                                                                                                sampling_method,
+                                                                                                is_prior=True)
+    re_adj_prior_sig = torch.sigmoid(re_adj_prior)
+    re_label_prior_sig = torch.sigmoid(re_prior_labels)
+    pred_single_link = []
+    true_single_link = []
+    pred_single_label = []
+    true_single_label = []
+    for i,j in test_edges:
+        pred_single_link.append(re_adj_prior_sig[i][j].detach().numpy())
+        true_single_link.append(org_adj[i][j])
+        pred_single_label.append(re_label_prior_sig[i])
+        true_single_label.append(labels[i])
+    auc, val_acc, val_ap, precision, recall, HR = roc_auc_single(pred_single_link, true_single_link)
+    auc_l, acc_l, ap_l, precision_l, recall_l, F1_score = roc_auc_estimator_labels(pred_single_label, true_single_label,
+                                                                                   labels)
+    return auc, val_acc, val_ap, precision, recall, HR, auc_l, acc_l, ap_l, precision_l, recall_l, F1_score
 
 
 

@@ -24,7 +24,6 @@ import torch.nn.functional as F
 import pyhocon
 import dgl
 import csv
-from scipy import sparse
 from dgl.nn.pytorch import GraphConv as GraphConv
 import copy
 from dataCenter import *
@@ -45,8 +44,8 @@ warnings.simplefilter('ignore')
 parser = argparse.ArgumentParser(description='Inductive')
 
 parser.add_argument('--e', type=int, dest="epoch_number", default=100, help="Number of Epochs")
-parser.add_argument('--dataSet', type=str, default="CiteSeer_dgl")
-parser.add_argument('--loss_type', dest="loss_type", default="1", help="type of combination between loss_A and loss_F")
+parser.add_argument('--dataSet', type=str, default="Cora_dgl")
+parser.add_argument('--loss_type', dest="loss_type", default="2", help="type of combination between loss_A and loss_F")
 parser.add_argument('--sampling_method', dest="sampling_method", default="deterministic", help="This var shows sampling method it could be: monte, importance_sampling, deterministic")
 parser.add_argument('--method', dest="method", default="multi", help="This var shows method it could be: multi, single")
 parser.add_argument('--iterative', dest="iterative", default="False", type=str, help="This flag is used if want to have iterative link prediction")
@@ -65,7 +64,7 @@ parser.add_argument('--NofCom', dest="num_of_comunities", default=128,
                     help="Number of comunites, tor latent space dimention; len(z)")
 parser.add_argument('-BN', dest="batch_norm", default=True,
                     help="either use batch norm at decoder; only apply in multi relational decoders")
-parser.add_argument('--DR', dest="DropOut_rate", default=.3, help="drop out rate")
+parser.add_argument('--DR', dest="DropOut_rate", default=.0, help="drop out rate")
 parser.add_argument('--encoder_layers', dest="encoder_layers", default="64", type=str,
                     help="a list in which each element determine the size of gcn; Note: the last layer size is determine with -NofCom")
 parser.add_argument('--lr', dest="lr", default=0.01, help="model learning rate")
@@ -75,7 +74,8 @@ parser.add_argument('--fully_inductive', dest="fully_inductive", default=False,
                     help="This flag is used if want to have fully o semi inductive link prediction")
 parser.add_argument('--transductive', dest="transductive", default="True", type=str,
                     help="This flag is used if want to have transductive link prediction")
-
+parser.add_argument('--edge_base', dest="edge_base", default="True", type=str,
+                    help="This flag is used if want to have edge base data splitting")
 
 args = parser.parse_args()
 fully_inductive = args.fully_inductive
@@ -102,11 +102,15 @@ torch.cuda.manual_seed_all(args.seed)
 ds = args.dataSet
 dataCenter = DataCenter()
 dataCenter.load_dataSet(ds)
-adj_list = sparse.csr_matrix(getattr(dataCenter, ds + '_adj_lists'))
+org_adj = getattr(dataCenter, ds + '_adj_lists')
 features = torch.FloatTensor(getattr(dataCenter, ds + '_feats'))
 labels = torch.FloatTensor(getattr(dataCenter, ds + '_labels')).to(device)
+val_indx = getattr(dataCenter, ds + '_val_edge_idx')
+train_indx = getattr(dataCenter, ds + '_train_edge_idx')
+ignore_edges = getattr(dataCenter, ds + '_ignore_edges_inx')
+adj_test = getattr(dataCenter, ds + '_adj_test')
 
-org_adj = adj_list.toarray()
+
 
 
 
@@ -182,111 +186,57 @@ if fully_inductive:
 # run recognition separately for the case of single_link
 std_z_recog, m_z_recog, z_recog, re_adj_recog, re_feat_recog, re_recog_labels = run_network(features, org_adj, labels, inductive_model, targets, sampling_method,
                                                             is_prior=False)
-
-
-res = org_adj.nonzero()
-index = np.where(np.isin(res[0], testId))  # only one node of the 2 ends of an edge needs to be in testId
-idd_list = res[0][index]
-neighbour_list = res[1][index]
-sample_list = random.sample(range(0, len(idd_list)), 100)
-
-# run prior network separately
-correct_subgraph = 0
-counter = 0
-target_edges = []
-for i in sample_list:
-    start_time = time.time()
-    print(counter)
-    counter+= 1
-    targets = []
-    idd = idd_list[i]
-    neighbour_id = neighbour_list[i]
-    adj_list_copy = copy.deepcopy(org_adj)
-    neigbour_prob_single = 1
-
-    if single_link:
-
-        adj_list_copy = copy.deepcopy(org_adj)
-        adj_list_copy[idd, neighbour_id] = 0  # find a test edge and set it to 0
-        adj_list_copy[neighbour_id, idd] = 0  # find a test edge and set it to 0
-
-        targets.append(idd)
-        targets.append(neighbour_id)
-        target_edges.append([idd, neighbour_id])
-        target_edges.append([neighbour_id, idd])
-        target_ids.append(idd)
-        target_ids.append(neighbour_id)
-
-
-        # run prior
-        std_z_prior, m_z_prior, z_prior, re_adj_prior, re_feat_prior, re_prior_labels = run_network(features,
-                                                                                                    adj_list_copy,
-                                                                                                    labels,
-                                                                                                    inductive_model,
-                                                                                                    targets,
-                                                                                                    sampling_method,
-                                                                                                    is_prior=True)
-
-        re_adj_prior_sig = torch.sigmoid(re_adj_prior)
-        re_label_prior_sig = torch.sigmoid(re_prior_labels)
-        pred_single_link.append(re_adj_prior_sig[idd, neighbour_id].tolist())
-        true_single_link.append(org_adj[idd, neighbour_id].tolist())
-        pred_single_label.append(re_label_prior_sig[idd])
-        true_single_label.append(labels[idd])
-
-    if multi_link:
-        true_multi_links = org_adj[idd].nonzero()
-        false_multi_links = np.array(random.sample(list(np.nonzero(org_adj[idd] == 0)[0]), len(true_multi_links[0])))
-
-        target_list = [[idd, i] for i in list(true_multi_links[0])]
-        target_list.extend([[idd, i] for i in list(false_multi_links)])
-        target_list = np.array(target_list)
-
-
-        targets = []
-        targets.append(idd)
-
-
-        # # run prior
-        # if the selected method is monte, this would be (all 0 + MC) or (MC) and if the selected method is IS, this would be IS
-        adj_list_copy = copy.deepcopy(org_adj)
-        adj_list_copy[idd, :] = 0  # set all the neigbours to 0
-        adj_list_copy[:, idd] = 0  # set all the neigbours to 0
-
-        # run prior
-        # target_edges.extend(target_list)
-        if args.iterative == "True":
-            c = 0
-            for e in target_list:
-
-
-                std_z_prior, m_z_prior, z_prior, re_adj_prior, re_feat_prior, re_prior_labels = run_network(features,
-                                                                                                            adj_list_copy,
+if args.edge_base:
+    res = adj_test.nonzero()
+    test_edges = np.array([res[0], res[1]]).T
+    auc, val_acc, val_ap, precision, recall, HR, auc_l, acc_l, ap_l, precision_l, recall_l, F1_score = test(test_edges,
+                                                                                                            org_adj,
+                                                                                                            run_network,
+                                                                                                            features,
                                                                                                             labels,
                                                                                                             inductive_model,
                                                                                                             targets,
-                                                                                                            sampling_method,
-                                                                                                            is_prior=True)
+                                                                                                            sampling_method)
 
 
-                re_adj_prior_sig = torch.sigmoid(re_adj_prior)
+else:
+    res = org_adj.nonzero()
+    index = np.where(np.isin(res[0], testId))  # only one node of the 2 ends of an edge needs to be in testId
+    idd_list = res[0][index]
+    neighbour_list = res[1][index]
+    sample_list = random.sample(range(0, len(idd_list)), 100)
 
-                # _, _, _, _, _, _, th = get_metrics(target_list, org_adj, re_adj_prior_sig)
-                target_edges.append((e, re_adj_prior_sig[e[0]][e[1]]))
-                # if re_adj_prior_sig[e[0]][e[1]] > 0.723:
-                adj_list_copy[e[0]][e[1]] = 1
-                adj_list_copy[e[1]][e[0]] = 1
-                if adj_list_copy[e[1]][e[0]]==1 and org_adj[e[1]][e[0]]==0:
-                    c += 1
-                    # print(adj_list_copy[e[1]][e[0]], org_adj[e[1]][e[0]])
-            wrong_pred.append(c/len(target_list))
-            num_neighbour.append(len(target_list))
+    # run prior network separately
+    correct_subgraph = 0
+    counter = 0
+    target_edges = []
 
-            for e, p in target_edges:
-                re_adj_prior_sig[e[0]][e[1]] = p
-                re_adj_prior_sig[e[1]][e[0]] = p
+    # auc, val_acc, val_ap, precision, recall, HR, auc_l, acc_l, ap_l, precision_l, recall_l, F1_score = test(test_edges, org_adj, run_network, features, labels, inductive_model, targets, sampling_method)
+    for i in sample_list:
+        start_time = time.time()
+        print(counter)
+        counter+= 1
+        targets = []
+        idd = idd_list[i]
+        neighbour_id = neighbour_list[i]
+        adj_list_copy = copy.deepcopy(org_adj)
+        neigbour_prob_single = 1
 
-        else:
+        if single_link:
+
+            adj_list_copy = copy.deepcopy(org_adj)
+            adj_list_copy[idd, neighbour_id] = 0  # find a test edge and set it to 0
+            adj_list_copy[neighbour_id, idd] = 0  # find a test edge and set it to 0
+
+            targets.append(idd)
+            targets.append(neighbour_id)
+            target_edges.append([idd, neighbour_id])
+            target_edges.append([neighbour_id, idd])
+            target_ids.append(idd)
+            target_ids.append(neighbour_id)
+
+
+            # run prior
             std_z_prior, m_z_prior, z_prior, re_adj_prior, re_feat_prior, re_prior_labels = run_network(features,
                                                                                                         adj_list_copy,
                                                                                                         labels,
@@ -296,14 +246,144 @@ for i in sample_list:
                                                                                                         is_prior=True)
 
             re_adj_prior_sig = torch.sigmoid(re_adj_prior)
+            re_label_prior_sig = torch.sigmoid(re_prior_labels)
+            pred_single_link.append(re_adj_prior_sig[idd, neighbour_id].tolist())
+            true_single_link.append(org_adj[idd, neighbour_id].tolist())
+            pred_single_label.append(re_label_prior_sig[idd])
+            true_single_label.append(labels[idd])
 
-        re_label_prior_sig = torch.sigmoid(re_prior_labels)
-        pred_multi_label.append(re_label_prior_sig[idd])
-        true_multi_label.append(labels[idd])
+        if multi_link:
+            true_multi_links = org_adj[idd].nonzero()
+            false_multi_links = np.array(random.sample(list(np.nonzero(org_adj[idd] == 0)[0]), len(true_multi_links[0])))
+
+            target_list = [[idd, i] for i in list(true_multi_links[0])]
+            target_list.extend([[idd, i] for i in list(false_multi_links)])
+            target_list = np.array(target_list)
 
 
-        auc, val_acc, val_ap, precision, recall, HR, pr_auc = get_metrics(target_list, org_adj, re_adj_prior_sig)
+            targets = []
+            targets.append(idd)
 
+
+            # # run prior
+            # if the selected method is monte, this would be (all 0 + MC) or (MC) and if the selected method is IS, this would be IS
+            adj_list_copy = copy.deepcopy(org_adj)
+            adj_list_copy[idd, :] = 0  # set all the neigbours to 0
+            adj_list_copy[:, idd] = 0  # set all the neigbours to 0
+
+            # run prior
+            # target_edges.extend(target_list)
+            if args.iterative == "True":
+                c = 0
+                for e in target_list:
+
+
+                    std_z_prior, m_z_prior, z_prior, re_adj_prior, re_feat_prior, re_prior_labels = run_network(features,
+                                                                                                                adj_list_copy,
+                                                                                                                labels,
+                                                                                                                inductive_model,
+                                                                                                                targets,
+                                                                                                                sampling_method,
+                                                                                                                is_prior=True)
+
+
+                    re_adj_prior_sig = torch.sigmoid(re_adj_prior)
+
+                    # _, _, _, _, _, _, th = get_metrics(target_list, org_adj, re_adj_prior_sig)
+                    target_edges.append((e, re_adj_prior_sig[e[0]][e[1]]))
+                    # if re_adj_prior_sig[e[0]][e[1]] > 0.723:
+                    adj_list_copy[e[0]][e[1]] = 1
+                    adj_list_copy[e[1]][e[0]] = 1
+                    if adj_list_copy[e[1]][e[0]]==1 and org_adj[e[1]][e[0]]==0:
+                        c += 1
+                        # print(adj_list_copy[e[1]][e[0]], org_adj[e[1]][e[0]])
+                wrong_pred.append(c/len(target_list))
+                num_neighbour.append(len(target_list))
+
+                for e, p in target_edges:
+                    re_adj_prior_sig[e[0]][e[1]] = p
+                    re_adj_prior_sig[e[1]][e[0]] = p
+
+            else:
+                std_z_prior, m_z_prior, z_prior, re_adj_prior, re_feat_prior, re_prior_labels = run_network(features,
+                                                                                                            adj_list_copy,
+                                                                                                            labels,
+                                                                                                            inductive_model,
+                                                                                                            targets,
+                                                                                                            sampling_method,
+                                                                                                            is_prior=True)
+
+                re_adj_prior_sig = torch.sigmoid(re_adj_prior)
+
+            re_label_prior_sig = torch.sigmoid(re_prior_labels)
+            pred_multi_label.append(re_label_prior_sig[idd])
+            true_multi_label.append(labels[idd])
+
+
+            auc, val_acc, val_ap, precision, recall, HR, pr_auc = get_metrics(target_list, org_adj, re_adj_prior_sig)
+
+
+            auc_list.append(auc)
+            acc_list.append(val_acc)
+            ap_list.append(val_ap)
+            precision_list.append(precision)
+            recall_list.append(recall)
+            HR_list.append(HR)
+            # pr_auc_list.append(pr_auc)
+
+
+
+
+
+    # consider negative edges for single link
+    if single_link:
+        false_count = len(pred_single_link)
+        res = np.argwhere(org_adj == 0)
+        np.random.shuffle(res)
+        index = np.where(np.isin(res[:, 0], testId))  # only one node of the 2 ends of an edge needs to be in testId
+        test_neg_edges = res[index]
+        for test_neg_edge in test_neg_edges[:false_count]:
+            targets = []
+            idd = test_neg_edge[0]
+            neighbour_id = test_neg_edge[1]
+            adj_list_copy = copy.deepcopy(org_adj)
+            adj_list_copy[idd, neighbour_id] = 0
+            adj_list_copy[neighbour_id, idd] = 0
+            targets.append(idd)
+            targets.append(neighbour_id)
+            target_edges.append([idd, neighbour_id])
+            target_edges.append([neighbour_id, idd])
+            target_ids.append(idd)
+            target_ids.append(neighbour_id)
+
+            # to update mq and sq for the case of importance_sampling
+
+            std_z_recog, m_z_recog, z_recog, re_adj_recog, re_feat_recog, re_recog_labels = run_network(features,
+                                                                                                        adj_list_copy,
+                                                                                                        labels,
+                                                                                                        inductive_model,
+                                                                                                        targets,
+                                                                                                        sampling_method,
+                                                                                                        is_prior=False)
+
+            std_z_prior, m_z_prior, z_prior, re_adj_prior, re_feat_prior, re_prior_labels = run_network(features, org_adj,
+                                                                                                        labels,
+                                                                                                        inductive_model,
+                                                                                                        targets,
+                                                                                                        sampling_method,
+                                                                                                        is_prior=True)
+
+
+
+            re_adj_prior_sig = torch.sigmoid(re_adj_prior)
+            re_label_prior_sig = torch.sigmoid(re_prior_labels)
+            pred_single_link.extend([re_adj_prior_sig[idd, neighbour_id].tolist()])
+            true_single_link.extend([org_adj[idd, neighbour_id].tolist()])
+            pred_single_label.extend([re_label_prior_sig[idd]])
+            true_single_label.extend([labels[idd]])
+
+        auc, val_acc, val_ap, precision, recall, HR = roc_auc_single(pred_single_link, true_single_link)
+        auc_l, acc_l, ap_l, precision_l, recall_l, F1_score = roc_auc_estimator_labels(pred_single_label, true_single_label,labels)
 
         auc_list.append(auc)
         acc_list.append(val_acc)
@@ -311,85 +391,36 @@ for i in sample_list:
         precision_list.append(precision)
         recall_list.append(recall)
         HR_list.append(HR)
-        # pr_auc_list.append(pr_auc)
 
+        auc_list_label.append(auc_l)
+        acc_list_label.append(acc_l)
+        ap_list_label.append(ap_l)
+        precision_list_label.append(precision_l)
+        recall_list_label.append(recall_l)
+        F1_list_label.append(F1_score)
 
+    if multi_link:
+        auc_l, acc_l, ap_l, precision_l, recall_l, F1_score = roc_auc_estimator_labels(pred_multi_label,
+                                                                                       true_multi_label, labels)
+        auc_list_label.append(auc_l)
+        acc_list_label.append(acc_l)
+        ap_list_label.append(ap_l)
+        precision_list_label.append(precision_l)
+        recall_list_label.append(recall_l)
+        F1_list_label.append(F1_score)
 
-
-
-# consider negative edges for single link
-if single_link:
-    false_count = len(pred_single_link)
-    res = np.argwhere(org_adj == 0)
-    np.random.shuffle(res)
-    index = np.where(np.isin(res[:, 0], testId))  # only one node of the 2 ends of an edge needs to be in testId
-    test_neg_edges = res[index]
-    for test_neg_edge in test_neg_edges[:false_count]:
-        targets = []
-        idd = test_neg_edge[0]
-        neighbour_id = test_neg_edge[1]
-        adj_list_copy = copy.deepcopy(org_adj)
-        adj_list_copy[idd, neighbour_id] = 0
-        adj_list_copy[neighbour_id, idd] = 0
-        targets.append(idd)
-        targets.append(neighbour_id)
-        target_edges.append([idd, neighbour_id])
-        target_edges.append([neighbour_id, idd])
-        target_ids.append(idd)
-        target_ids.append(neighbour_id)
-
-        # to update mq and sq for the case of importance_sampling
-
-        std_z_recog, m_z_recog, z_recog, re_adj_recog, re_feat_recog, re_recog_labels = run_network(features,
-                                                                                                    adj_list_copy,
-                                                                                                    labels,
-                                                                                                    inductive_model,
-                                                                                                    targets,
-                                                                                                    sampling_method,
-                                                                                                    is_prior=False)
-
-        std_z_prior, m_z_prior, z_prior, re_adj_prior, re_feat_prior, re_prior_labels = run_network(features, org_adj,
-                                                                                                    labels,
-                                                                                                    inductive_model,
-                                                                                                    targets,
-                                                                                                    sampling_method,
-                                                                                                    is_prior=True)
-
-
-
-        re_adj_prior_sig = torch.sigmoid(re_adj_prior)
-        re_label_prior_sig = torch.sigmoid(re_prior_labels)
-        pred_single_link.extend([re_adj_prior_sig[idd, neighbour_id].tolist()])
-        true_single_link.extend([org_adj[idd, neighbour_id].tolist()])
-        pred_single_label.extend([re_label_prior_sig[idd]])
-        true_single_label.extend([labels[idd]])
-
-    auc, val_acc, val_ap, precision, recall, HR = roc_auc_single(pred_single_link, true_single_link)
-    auc_l, acc_l, ap_l, precision_l, recall_l, F1_score = roc_auc_estimator_labels(pred_single_label, true_single_label,labels)
-
-    auc_list.append(auc)
-    acc_list.append(val_acc)
-    ap_list.append(val_ap)
-    precision_list.append(precision)
-    recall_list.append(recall)
-    HR_list.append(HR)
-
-    auc_list_label.append(auc_l)
-    acc_list_label.append(acc_l)
-    ap_list_label.append(ap_l)
-    precision_list_label.append(precision_l)
-    recall_list_label.append(recall_l)
-    F1_list_label.append(F1_score)
-
-if multi_link:
-    auc_l, acc_l, ap_l, precision_l, recall_l, F1_score = roc_auc_estimator_labels(pred_multi_label,
-                                                                                   true_multi_label, labels)
-    auc_list_label.append(auc_l)
-    acc_list_label.append(acc_l)
-    ap_list_label.append(ap_l)
-    precision_list_label.append(precision_l)
-    recall_list_label.append(recall_l)
-    F1_list_label.append(F1_score)
+auc_list.append(auc)
+acc_list.append(val_acc)
+ap_list.append(val_ap)
+precision_list.append(precision)
+recall_list.append(recall)
+HR_list.append(HR)
+auc_list_label.append(auc_l)
+acc_list_label.append(acc_l)
+ap_list_label.append(ap_l)
+precision_list_label.append(precision_l)
+recall_list_label.append(recall_l)
+F1_list_label.append(F1_score)
 
 
 # Print results
@@ -406,7 +437,7 @@ save_recons_adj_name = save_recons_adj_name + "_" + args.loss_type
 print(save_recons_adj_name)
 end_time = time.time()
 print("time:")
-print(end_time-start_time)
+# print(end_time-start_time)
 if args.iterative == "True":
     print("Link Prediction")
     print("auc= %.3f , acc= %.3f ap= %.3f , precision= %.3f , recall= %.3f , HR= %.3f, nn= %.3f, w_ratio= %.3f" % (
@@ -443,24 +474,8 @@ statistics.mean(auc_list_label), statistics.mean(acc_list_label), statistics.mea
 statistics.mean(precision_list_label), statistics.mean(recall_list_label), statistics.mean(F1_list_label)))
 
 
-
-
-# with open('./results.csv', 'a', newline="\n") as f:
-#     writer = csv.writer(f)
-#     writer.writerow(
-#         [save_recons_adj_name+"_mean", statistics.mean(auc_list), statistics.mean(acc_list), statistics.mean(ap_list),
-#          statistics.mean(precision_list), statistics.mean(recall_list), statistics.mean(HR_list)])
-# with open('./results.csv', 'a', newline="\n") as f:
-#     writer = csv.writer(f)
-#     writer.writerow(
-#         [save_recons_adj_name+"_std", statistics.stdev(auc_list), statistics.stdev(acc_list), statistics.stdev(ap_list), statistics.stdev(precision_list),
-# statistics.stdev(recall_list), statistics.stdev(HR_list), statistics.stdev(pr_auc_list)])
 with open('./results.csv', 'a', newline="\n") as f:
     writer = csv.writer(f)
     writer.writerow(["labels_" + save_recons_adj_name, statistics.mean(auc_list_label), statistics.mean(acc_list_label),
                      statistics.mean(ap_list_label), statistics.mean(precision_list_label),
                      statistics.mean(recall_list_label), statistics.mean(F1_list_label)])
-# tr = torch.tensor(target_edges)
-# tr_ids = torch.tensor((target_ids))
-# torch.save(tr, args.dataSet+"_targets.pt")
-# torch.save(tr_ids, args.dataSet+"_target_idss.pt")

@@ -17,6 +17,7 @@ import scipy.sparse as sp
 import networkx as nx
 import torch
 from sklearn.preprocessing import OneHotEncoder
+from scipy import sparse
 import json
 import pickle
 import zipfile
@@ -54,16 +55,23 @@ class DataCenter():
             if dataSet == 'computer_dgl':
                 ds = AmazonCoBuyComputerDataset()
             g = ds[0]
+
             num_class = ds.num_classes
             features = g.ndata['feat']
             labels = g.ndata['label']
             labels = labels.numpy()
+
             adj_matrix = g.adjacency_matrix(scipy_fmt='coo')
             adj = adj_matrix.toarray()
+
             test_indexs, val_indexs, train_indexs = self._split_data(labels, adj)
+
             encoder = OneHotEncoder(sparse_output=False)
             numerical_classes = labels.reshape(-1, 1)
             labels = encoder.fit_transform(numerical_classes)
+
+            self._add_edges(test_indexs, val_indexs, train_indexs, adj, dataSet)
+
             setattr(self, dataSet + '_test', test_indexs)
             setattr(self, dataSet + '_val', val_indexs)
             setattr(self, dataSet + '_train', train_indexs)
@@ -88,8 +96,10 @@ class DataCenter():
             encoder = OneHotEncoder(sparse_output=False)
             numerical_classes = labels.reshape(-1, 1)
             labels = encoder.fit_transform(numerical_classes)
-
+            adj = sparse.csr_matrix(adj).toarray()
             # test_indexs, val_indexs, train_indexs = self._split_data(labels)
+
+
 
             setattr(self, dataSet + '_test', test_indexs)
             setattr(self, dataSet + '_val', val_indexs)
@@ -123,10 +133,6 @@ class DataCenter():
 
             features = sp.vstack((allx, tx)).tolil()
             features[test_idx_reorder, :] = features[test_idx_range, :]
-            # features = np.asarray(features)
-            # emb = torch.load("./datasets/citeseer/CiteSeer_x_gigamae.pt", map_location=torch.device('cpu'))
-            # emb = emb.cpu().detach().numpy()
-            # features = np.concatenate((features.toarray(), emb), axis=1)
 
             adj = nx.adjacency_matrix(nx.from_dict_of_lists(graph))
 
@@ -457,153 +463,91 @@ class DataCenter():
         val_indexs = val_indexs.astype('int32')
         train_indexs = train_indexs.astype('int32')
 
-        # nodes_dict_val = {}
-        # nodes_dict_te = {}
-        # nodes_dict_tr = {}
-        # for i in range(0, len(test_indexs)):
-        #     nodes = nodes_dict_te.get(labels[test_indexs[i]], [])
-        #     nodes.append(i)
-        #     nodes_dict_te[labels[test_indexs[i]]] = nodes
-        #
-        #
-        # for i in range(0, len(val_indexs)):
-        #     nodes = nodes_dict_val.get(labels[val_indexs[i]], [])
-        #     nodes.append(i)
-        #     nodes_dict_val[labels[val_indexs[i]]] = nodes
-        #
-        # for i in range(0, len(train_indexs)):
-        #     nodes = nodes_dict_tr.get(labels[train_indexs[i]], [])
-        #     nodes.append(i)
-        #     nodes_dict_tr[labels[train_indexs[i]]] = nodes
-        #
-        # for i in range(0, num_classes):
-        #     print(i)
-        #     print(len(nodes_dict_tr[i]))
-        #     print(len(nodes_dict_te[i]))
-        #     print(len(nodes_dict_val[i]))
-
         return test_indexs, val_indexs, train_indexs
 
 
-        # np.random.seed(123)
-        # num_nodes = labels.shape[0]
-        # num_classes = len(np.unique(labels))
-        # node_degree = np.sum(adj, axis=0)
-        # max_nodes = (int)(num_nodes / 20)
-        # rand_indices = np.random.permutation(num_nodes)
-        #
-        # test_size = int(num_nodes * test_split)
-        # val_size = int(num_nodes * val_split)
-        # train_size = num_nodes - (test_size + val_size)
-        #
-        # test_indexs = rand_indices[:test_size]
-        # val_indexs = rand_indices[test_size:(test_size + val_size)]
-        # train_indexs = rand_indices[(test_size + val_size):]
-        #
-        # return test_indexs, val_indexs, train_indexs
-        # np.random.seed(123)
-        # num_nodes = labels.shape[0]
-        # num_classes = len(np.unique(labels))
-        #
-        # nodes_dict = {}
-        # # create dict for each class
-        # for i in range(0, num_nodes):
-        #     # if not i in train_nodes:
-        #     nodes = nodes_dict.get(labels[i], [])
-        #     nodes.append(i)
-        #     #  nodes = np.random.permutation(nodes)
-        #     nodes_dict[labels[i]] = nodes
-        #
-        # for i in range(0, num_classes):
-        #     nodes = nodes_dict[i]
-        #     nodes = np.random.permutation(nodes)
-        #     nodes_dict[i] = nodes
-        #
-        # test_indexs = np.array([])
-        # val_indexs = np.array([])
-        # train_indexs = np.array([])
-        #
-        # len_test = int(num_nodes * test_split)
-        # len_val = int(num_nodes * val_split)see
-        # len_train = num_nodes - (len_val + len_test)
-        #
-        # node_per_class = int(len_train / num_classes)
-        # for i in range(0, num_classes):
-        #     train_indexs = np.concatenate((train_indexs, nodes_dict[i][:node_per_class]))
-        #
-        # list_of_nodes = [x for x in range(0, num_nodes)]
-        # available_nodes = [x for x in list_of_nodes if x not in train_indexs]
-        #
-        # test_indexs = available_nodes[:len_test]
-        # val_indexs = available_nodes[len_test:len_test + len_val]
-        # train_indexs = np.concatenate((train_indexs, available_nodes[len_test + len_val:]))
-        #
-        # return test_indexs, val_indexs, train_indexs.astype('i')
 
-        # np.random.seed(123)
-        # num_nodes = labels.shape[0]
-        # num_classes = len(np.unique(labels))
-        #
-        # nodes_dict = {}
-        # # create dict for each class
-        # for i in range(0, num_nodes):
-        #     # if not i in train_nodes:
-        #     nodes = nodes_dict.get(labels[i], [])
-        #     nodes.append(i)
-        #     #  nodes = np.random.permutation(nodes)
-        #     nodes_dict[labels[i]] = nodes
-        #
-        # for i in range(0, num_classes):
-        #     nodes = nodes_dict[i]
-        #     nodes = np.random.permutation(nodes)
-        #     nodes_dict[i] = nodes
-        #
-        # len_min_class = len(nodes_dict[0])
-        # for i in range(0, num_classes):
-        #     if len(nodes_dict[i])<len_min_class:
-        #         len_min_class = len(nodes_dict[i])
-        #
-        #
-        # test_indexs = np.array([])
-        # val_indexs = np.array([])
-        # train_indexs = np.array([])
-        #
-        # for i in range(0, num_classes):
-        #     n_nodes = len_min_class
-        #     number_test = int(n_nodes * test_split)
-        #     number_val = int(n_nodes * val_split)
-        #     number_train = n_nodes-(number_test+number_val)
-        #
-        #     test_indexs = np.concatenate((test_indexs, nodes_dict[i][:number_test]))
-        #     val_indexs = np.concatenate((val_indexs, nodes_dict[i][number_test:(number_test + number_val)]))
-        #     train_indexs = np.concatenate((train_indexs, nodes_dict[i][(number_test + number_val):(number_test + number_val+number_train)]))
-        #
-        # train_indexs = train_indexs.astype('i')
-        # val_indexs = val_indexs.astype('i')
-        # test_indexs = test_indexs.astype('i')
-        # node_d_te = {}
-        # node_d_tr = {}
-        # node_d_v = {}
-        #
-        # for i in test_indexs:
-        #     nodes = node_d_te.get(labels[i], [])
-        #     nodes.append(i)
-        #     node_d_te[labels[i]] = nodes
-        #
-        # for i in val_indexs:
-        #     nodes = node_d_v.get(labels[i], [])
-        #     nodes.append(i)
-        #     node_d_v[labels[i]] = nodes
-        #
-        # for i in train_indexs:
-        #     nodes = node_d_tr.get(labels[i], [])
-        #     nodes.append(i)
-        #     node_d_tr[labels[i]] = nodes
-        #
-        # for i in range(0, num_classes):
-        #     print(i)
-        #     print(len(node_d_tr[i]))
-        #     print(len(node_d_te[i]))
-        #     print(len(node_d_v[i]))
-        #
-        # return test_indexs, val_indexs, train_indexs
+    def _add_edges(self, test_indexs, val_indexs, train_indexs, adj, dataSet, ignore_val_test_edges = False, ignore_self_loop = True):
+        # Remove diagonal elements
+        adj_tril = np.tril(adj, -1)
+
+        edges = adj_tril.nonzero()
+        edges_list = np.array([edges[0], edges[1]]).T
+
+        edges_negative = np.argwhere(adj == 0)
+        edges_negative_T = edges_negative.T
+        edges_negative_tril_index = np.where(edges_negative_T[0] > edges_negative_T[1])
+        edges_negative_tril = edges_negative[edges_negative_tril_index]
+
+        # num_test = int(np.floor(len(edges[0]) / 10.))
+        # num_val = int(np.floor(len(edges[0]) / 20.))
+        # num_train = int(np.floor(len(edges[0]) / 70.))
+
+        edges_test_index = np.where(np.isin(edges[0], test_indexs) & np.isin(edges[1], test_indexs))
+        edges_val_index = np.where(np.isin(edges[0], val_indexs) & np.isin(edges[1], val_indexs))
+        edges_train_index = np.where(np.isin(edges[0], train_indexs))
+
+
+        edges_test = np.array(edges_list[edges_test_index])
+        edges_val = np.array(edges_list[edges_val_index])
+        edges_train = np.array(edges_list[edges_train_index])
+
+        edges_test_neg_index = np.where(np.isin(edges_negative_tril.T[0], test_indexs) & np.isin(edges_negative_tril.T[1], test_indexs))
+        edges_val_neg_index = np.where(np.isin(edges_negative_tril.T[0], val_indexs) & np.isin(edges_negative_tril.T[1], val_indexs))
+        edges_train_neg_index = np.where(np.isin(edges_negative_tril.T[0], train_indexs))
+
+        edges_test_neg = np.array(edges_negative_tril[edges_test_neg_index][:edges_test.shape[0]])
+        edges_val_neg = np.array(edges_negative_tril[edges_val_neg_index][:edges_val.shape[0]])
+        edges_train_neg = np.array(edges_negative_tril[edges_train_neg_index][:edges_train.shape[0]])
+
+        adj_train = np.zeros((adj.shape[0], adj.shape[1]))
+        for i, j in edges_train:
+            adj_train[i][j] = 1
+
+        adj_test = np.zeros((adj.shape[0], adj.shape[1]))
+        for i, j in edges_test:
+            adj_test[i][j] = 1
+        for i, j in edges_test_neg:
+            adj_test[i][j] = 1
+
+        adj_val = np.zeros((adj.shape[0], adj.shape[1]))
+        for i, j in edges_val:
+            adj_val[i][j] = 1
+
+
+
+        val_edge_idx = [list(np.array(edges_val)[:,0]),list(np.array(edges_val)[:,1])]
+        val_edge_idx[0].extend(edges_val_neg[:,0])
+        val_edge_idx[1].extend(edges_val_neg[:,1])
+
+        train_edge_idx = [list(np.array(edges_train)[:,0]),list(np.array(edges_train)[:,1])]
+        train_edge_idx[0].extend(edges_train_neg[:,0])
+        train_edge_idx[1].extend(edges_train_neg[:,1])
+
+        ignore_edges_inx = None
+        if ignore_val_test_edges != False:
+            ignore_edges_inx = copy.deepcopy(val_edge_idx)
+            ignore_edges_inx[0].extend(edges_test[:, 0])
+            ignore_edges_inx[1].extend(edges_test[:, 1])
+            ignore_edges_inx[0].extend(np.array(edges_test_neg)[:, 0])
+            ignore_edges_inx[1].extend(np.array(edges_test_neg)[:, 1])
+        # -----------------------------------------------------------------
+
+        if ignore_self_loop == True:
+            if not ignore_edges_inx:
+                ignore_edges_inx = [[], []]
+            ignore_edges_inx[0].extend([i for i in range(adj.shape[0])])
+            ignore_edges_inx[1].extend([i for i in range(adj.shape[0])])
+
+        setattr(self, dataSet + '_edges_test', edges_test)
+        setattr(self, dataSet + '_edges_test_neg', edges_test_neg)
+        setattr(self, dataSet + '_edges_val', edges_val)
+        setattr(self, dataSet + '_edges_val_neg', edges_val_neg)
+        setattr(self, dataSet + '_edges_train', edges_train)
+        setattr(self, dataSet + '_edges_train_neg', edges_train_neg)
+        setattr(self, dataSet + '_adj_train', adj_train)
+        setattr(self, dataSet + '_adj_test', adj_test)
+        setattr(self, dataSet + '_adj_val', adj_val)
+        setattr(self, dataSet + '_ignore_edges_inx', ignore_edges_inx)
+        setattr(self, dataSet + '_val_edge_idx', val_edge_idx)
+        setattr(self, dataSet + '_train_edge_idx', train_edge_idx)

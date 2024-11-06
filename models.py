@@ -283,7 +283,6 @@ class VGAE_FrameWork(torch.nn.Module):
         generated_adj = self.generator(z)  # link decoder
         generated_feat = self.generator_feat(z) # feature decoder
         generated_classes = self.classifier(z) # node classifier
-        torch.save(z, "CiteSeer_embeddings.pt")
         if not train:
             z_0 = self.generate_feature_vec(x, adj, self.latent_dim)  # attribute encoder
             z, m_z, std_z = self.inference(adj, z_0)  # link encoder
