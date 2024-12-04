@@ -45,9 +45,9 @@ parser = argparse.ArgumentParser(description='Inductive')
 
 parser.add_argument('--e', type=int, dest="epoch_number", default=100, help="Number of Epochs")
 parser.add_argument('--dataSet', type=str, default="Cora_dgl")
-parser.add_argument('--loss_type', dest="loss_type", default="2", help="type of combination between loss_A and loss_F")
+parser.add_argument('--loss_type', dest="loss_type", default="1", help="type of combination between loss_A and loss_F")
 parser.add_argument('--sampling_method', dest="sampling_method", default="deterministic", help="This var shows sampling method it could be: monte, importance_sampling, deterministic")
-parser.add_argument('--method', dest="method", default="multi", help="This var shows method it could be: multi, single")
+parser.add_argument('--method', dest="method", default="single", help="This var shows method it could be: multi, single")
 parser.add_argument('--iterative', dest="iterative", default="False", type=str, help="This flag is used if want to have iterative link prediction")
 parser.add_argument('--tuning', dest="tuning", default="False", type=str, help="This flag is used if want to tune hyperparameters in helper_opt")
 
@@ -72,7 +72,7 @@ parser.add_argument('--is_prior', dest="is_prior", default=False, help="This fla
 parser.add_argument('--targets', dest="targets", default=[], help="This list is used for sampling")
 parser.add_argument('--fully_inductive', dest="fully_inductive", default=False,
                     help="This flag is used if want to have fully o semi inductive link prediction")
-parser.add_argument('--transductive', dest="transductive", default="True", type=str,
+parser.add_argument('--transductive', dest="transductive", default="False", type=str,
                     help="This flag is used if want to have transductive link prediction")
 parser.add_argument('--edge_base', dest="edge_base", default="True", type=str,
                     help="This flag is used if want to have edge base data splitting")

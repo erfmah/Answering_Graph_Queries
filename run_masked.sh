@@ -19,15 +19,15 @@ export LD_LIBRARY_PATH=/localhome/pnaddaf/anaconda3/envs/env/lib/
 #done
 #done
 
-for i in  "Cora_dgl" "ACM" "IMDB" "CiteSeer_dgl" "photos_dgl"
+for i in  "IMDB" "Cora_dgl" "CiteSeer_dgl"
 do
-for j in "4" "3" "0"
+for j in "2"
 do
-for b in "single" "multi"
+for b in "single"
 do
 for a in "False"
 do
-for c in "Multi_SAGE"
+for c in "Multi_GAT"
 do
 python -u main.py --dataSet "$i" --loss_type "$j"  --method "$b" --iterative "$a" --encoder_type "$c"
 done

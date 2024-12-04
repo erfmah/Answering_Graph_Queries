@@ -290,9 +290,11 @@ class DataCenter():
             encoder = OneHotEncoder(sparse_output=False)
             numerical_classes = labels.reshape(-1, 1)
             labels = encoder.fit_transform(numerical_classes)
+            adj = adj[:index, :index].toarray()
 
             # index = -1
             # test_indexs, val_indexs, train_indexs = self._split_data(feature[:index].shape[0])
+            self._add_edges(test_indexs, val_indexs, train_indexs, adj, dataSet)
 
             setattr(self, dataSet + '_test', test_indexs)
             setattr(self, dataSet + '_val', val_indexs)
@@ -300,7 +302,7 @@ class DataCenter():
 
             setattr(self, dataSet + '_feats', feature[:index].toarray())
             setattr(self, dataSet + '_labels', labels)
-            setattr(self, dataSet + '_adj_lists', adj[:index, :index].toarray())
+            setattr(self, dataSet + '_adj_lists', adj)
             setattr(self, dataSet + '_edge_labels', edge_labels[:index].toarray())
 
         if dataSet == "ACM":
